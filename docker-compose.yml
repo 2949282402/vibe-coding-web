@@ -1,0 +1,140 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: hejulian-blog-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hejulian_blog}
+      MYSQL_USER: ${MYSQL_USER:-hejulian_blog}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_change_me}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./sql/blog_mysql_init.sql:/docker-entrypoint-initdb.d/01-blog.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: hejulian-blog-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.0
+    container_name: hejulian-blog-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  llm-bridge:
+    profiles: ["llm-bridge"]
+    build:
+      context: ./llm-bridge
+      dockerfile: Dockerfile
+    container_name: hejulian-blog-llm-bridge
+    restart: unless-stopped
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${BLOG_RAG_MODEL:-qwen3.5:4b}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-600}
+      PORT: 8090
+      TZ: Asia/Shanghai
+    ports:
+      - "${LLM_BRIDGE_PORT:-8090}:8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hejulian-blog-backend
+    restart: unless-stopped
+    environment:
+      BLOG_DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hejulian_blog}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      BLOG_DB_USERNAME: ${MYSQL_USER:-hejulian_blog}
+      BLOG_DB_PASSWORD: ${MYSQL_PASSWORD:-change_me}
+      BLOG_REDIS_HOST: redis
+      BLOG_REDIS_PORT: 6379
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      BLOG_RAG_GENERATOR_ENABLED: ${BLOG_RAG_GENERATOR_ENABLED:-false}
+      BLOG_RAG_EMBEDDING_ENABLED: ${BLOG_RAG_EMBEDDING_ENABLED:-false}
+      BLOG_RAG_RERANK_ENABLED: ${BLOG_RAG_RERANK_ENABLED:-false}
+      BLOG_RAG_QDRANT_ENABLED: ${BLOG_RAG_QDRANT_ENABLED:-false}
+      BLOG_RAG_PYTHON_BRIDGE_ENABLED: ${BLOG_RAG_PYTHON_BRIDGE_ENABLED:-false}
+      BLOG_RAG_PYTHON_BRIDGE_BASE_URL: ${BLOG_RAG_PYTHON_BRIDGE_BASE_URL:-http://host.docker.internal:8090}
+      BLOG_RAG_PYTHON_BRIDGE_TIMEOUT_SECONDS: ${BLOG_RAG_PYTHON_BRIDGE_TIMEOUT_SECONDS:-600}
+      BLOG_RAG_STREAM_TIMEOUT_MILLIS: ${BLOG_RAG_STREAM_TIMEOUT_MILLIS:-900000}
+      BLOG_RAG_BASE_URL: ${BLOG_RAG_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      BLOG_RAG_API_KEY: ${BLOG_RAG_API_KEY:-}
+      BLOG_RAG_MODEL: ${BLOG_RAG_MODEL:-qwen-max}
+      BLOG_RAG_GENERATOR_TIMEOUT_SECONDS: ${BLOG_RAG_GENERATOR_TIMEOUT_SECONDS:-180}
+      BLOG_RAG_EMBEDDING_BASE_URL: ${BLOG_RAG_EMBEDDING_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      BLOG_RAG_EMBEDDING_API_KEY: ${BLOG_RAG_EMBEDDING_API_KEY:-}
+      BLOG_RAG_EMBEDDING_MODEL: ${BLOG_RAG_EMBEDDING_MODEL:-text-embedding-v4}
+      BLOG_RAG_EMBEDDING_DIMENSIONS: ${BLOG_RAG_EMBEDDING_DIMENSIONS:-1024}
+      BLOG_RAG_EMBEDDING_BATCH_SIZE: ${BLOG_RAG_EMBEDDING_BATCH_SIZE:-10}
+      BLOG_RAG_RERANK_BASE_URL: ${BLOG_RAG_RERANK_BASE_URL:-https://dashscope.aliyuncs.com/compatible-api/v1}
+      BLOG_RAG_RERANK_API_KEY: ${BLOG_RAG_RERANK_API_KEY:-}
+      BLOG_RAG_RERANK_MODEL: ${BLOG_RAG_RERANK_MODEL:-qwen3-rerank}
+      BLOG_RAG_QDRANT_BASE_URL: ${BLOG_RAG_QDRANT_BASE_URL:-http://qdrant:6333}
+      BLOG_RAG_QDRANT_API_KEY: ${BLOG_RAG_QDRANT_API_KEY:-}
+      BLOG_RAG_QDRANT_COLLECTION: ${BLOG_RAG_QDRANT_COLLECTION:-blog_knowledge_chunks}
+      BLOG_RAG_QDRANT_TIMEOUT_SECONDS: ${BLOG_RAG_QDRANT_TIMEOUT_SECONDS:-10}
+      BLOG_RAG_QDRANT_ON_DISK_PAYLOAD: ${BLOG_RAG_QDRANT_ON_DISK_PAYLOAD:-true}
+      BLOG_RAG_RECALL_MULTIPLIER: ${BLOG_RAG_RECALL_MULTIPLIER:-4}
+      BLOG_RAG_TOP_K: ${BLOG_RAG_TOP_K:-4}
+      BLOG_RAG_CHUNK_SIZE: ${BLOG_RAG_CHUNK_SIZE:-520}
+      BLOG_RAG_CHUNK_OVERLAP: ${BLOG_RAG_CHUNK_OVERLAP:-120}
+      BLOG_RAG_MIN_SCORE: ${BLOG_RAG_MIN_SCORE:-0.2}
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hejulian-blog-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+
+volumes:
+  mysql-data:
+  redis-data:
+  qdrant-data:

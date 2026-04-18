@@ -1,0 +1,13 @@
+node_modules/
+dist/
+target/
+.env
+.idea/
+.vscode/
+*.iml
+*.log
+.DS_Store
+frontend/.env.local
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd

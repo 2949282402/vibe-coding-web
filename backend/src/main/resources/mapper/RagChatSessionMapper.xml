@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.mapper.RagChatSessionMapper">
+
+    <resultMap id="RagChatSessionResultMap" type="com.hejulian.blog.entity.RagChatSession">
+        <id property="sessionId" column="session_id"/>
+        <result property="title" column="title"/>
+        <result property="preview" column="preview"/>
+        <result property="messageCount" column="message_count"/>
+        <result property="manualTitle" column="manual_title"/>
+        <result property="deleted" column="deleted"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectBySessionId" resultMap="RagChatSessionResultMap">
+        SELECT session_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
+        FROM rag_chat_sessions
+        WHERE session_id = #{sessionId}
+    </select>
+
+    <select id="selectSessions" resultMap="RagChatSessionResultMap">
+        SELECT session_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
+        FROM rag_chat_sessions
+        <where>
+            <if test="includeDeleted == false">
+                deleted = FALSE
+            </if>
+        </where>
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.entity.RagChatSession">
+        INSERT INTO rag_chat_sessions (
+            session_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
+        ) VALUES (
+            #{sessionId}, #{title}, #{preview}, #{messageCount}, #{manualTitle}, #{deleted}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="updateLifecycle">
+        UPDATE rag_chat_sessions
+        SET
+            title = #{title},
+            preview = #{preview},
+            message_count = #{messageCount},
+            deleted = #{deleted},
+            updated_at = #{updatedAt}
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <update id="updateTitle">
+        UPDATE rag_chat_sessions
+        SET
+            title = #{title},
+            manual_title = TRUE,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <update id="markDeleted">
+        UPDATE rag_chat_sessions
+        SET
+            deleted = #{deleted},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = #{sessionId}
+    </update>
+
+</mapper>

@@ -1,0 +1,22 @@
+[Unit]
+Description=HeJulian Blog Backend
+After=network.target mysql.service mysqld.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/opt/hejulian-blog/app/backend
+EnvironmentFile=/opt/hejulian-blog/app/backend/blog-backend.env
+ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/hejulian-blog/app/backend/blog-backend-1.0.0.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+StandardOutput=append:/opt/hejulian-blog/logs/backend/backend.out.log
+StandardError=append:/opt/hejulian-blog/logs/backend/backend.err.log
+
+[Install]
+WantedBy=multi-user.target
+

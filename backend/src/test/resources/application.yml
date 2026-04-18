@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:hejulian_blog;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+  cache:
+    type: simple
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+mybatis:
+  mapper-locations: classpath:/mapper/*.xml
+  type-aliases-package: com.hejulian.blog.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+management:
+  health:
+    redis:
+      enabled: false
+
+blog:
+  site:
+    name: HeJulian Blog
+    hero-title: Build Once, Write for Years
+    hero-subtitle: A personal blog system built with Vue 3 and Spring Boot for writing, taxonomy management, comment moderation, and admin operations.
+  jwt:
+    secret: c3ByaW5nLWJvb3QtanNwLWFkbWluLWp3dC1zZWNyZXQta2V5LWZvci1oZWp1bGlhbi1ibG9n
+    expiration-millis: 604800000

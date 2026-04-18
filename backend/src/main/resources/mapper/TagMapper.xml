@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.mapper.TagMapper">
+
+    <resultMap id="TagResultMap" type="com.hejulian.blog.entity.Tag">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="slug" column="slug"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectAllOrderByName" resultMap="TagResultMap">
+        SELECT id, name, slug, created_at, updated_at
+        FROM tags
+        ORDER BY name ASC
+    </select>
+
+    <select id="selectById" resultMap="TagResultMap">
+        SELECT id, name, slug, created_at, updated_at
+        FROM tags
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectByIds" resultMap="TagResultMap">
+        SELECT id, name, slug, created_at, updated_at
+        FROM tags
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY name ASC
+    </select>
+
+    <select id="selectTagsByPostId" resultMap="TagResultMap">
+        SELECT t.id, t.name, t.slug, t.created_at, t.updated_at
+        FROM tags t
+        INNER JOIN post_tags pt ON pt.tag_id = t.id
+        WHERE pt.post_id = #{postId}
+        ORDER BY t.name ASC
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1) FROM tags
+    </select>
+
+    <select id="countById" resultType="long">
+        SELECT COUNT(1) FROM tags WHERE id = #{id}
+    </select>
+
+    <select id="countBySlug" resultType="long">
+        SELECT COUNT(1) FROM tags WHERE slug = #{slug}
+    </select>
+
+    <select id="countBySlugAndIdNot" resultType="long">
+        SELECT COUNT(1) FROM tags WHERE slug = #{slug} AND id != #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.entity.Tag" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tags (name, slug, created_at, updated_at)
+        VALUES (#{name}, #{slug}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="update" parameterType="com.hejulian.blog.entity.Tag">
+        UPDATE tags
+        SET name = #{name},
+            slug = #{slug},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM tags WHERE id = #{id}
+    </delete>
+
+</mapper>
+

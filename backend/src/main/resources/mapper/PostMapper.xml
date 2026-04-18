@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.mapper.PostMapper">
+
+    <resultMap id="PostResultMap" type="com.hejulian.blog.entity.Post">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="slug" column="slug"/>
+        <result property="summary" column="summary"/>
+        <result property="coverImage" column="cover_image"/>
+        <result property="content" column="content"/>
+        <result property="status" column="status"/>
+        <result property="allowComment" column="allow_comment"/>
+        <result property="featured" column="featured"/>
+        <result property="viewCount" column="view_count"/>
+        <result property="publishedAt" column="published_at"/>
+        <result property="categoryId" column="category_id"/>
+        <result property="categoryName" column="category_name"/>
+        <result property="categorySlug" column="category_slug"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="BasePostColumns">
+        p.id, p.title, p.slug, p.summary, p.cover_image, p.content, p.status, p.allow_comment,
+        p.featured, p.view_count, p.published_at, p.category_id, p.created_at, p.updated_at,
+        c.name AS category_name, c.slug AS category_slug
+    </sql>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1) FROM posts
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(1) FROM posts WHERE status = #{status}
+    </select>
+
+    <select id="countByCategoryId" resultType="long">
+        SELECT COUNT(1) FROM posts WHERE category_id = #{categoryId}
+    </select>
+
+    <select id="countByCategoryIdAndStatus" resultType="long">
+        SELECT COUNT(1) FROM posts WHERE category_id = #{categoryId} AND status = #{status}
+    </select>
+
+    <select id="countByTagId" resultType="long">
+        SELECT COUNT(DISTINCT p.id)
+        FROM posts p
+        INNER JOIN post_tags pt ON pt.post_id = p.id
+        WHERE pt.tag_id = #{tagId}
+    </select>
+
+    <select id="countByTagIdAndStatus" resultType="long">
+        SELECT COUNT(DISTINCT p.id)
+        FROM posts p
+        INNER JOIN post_tags pt ON pt.post_id = p.id
+        WHERE pt.tag_id = #{tagId} AND p.status = #{status}
+    </select>
+
+    <select id="countBySlug" resultType="long">
+        SELECT COUNT(1) FROM posts WHERE slug = #{slug}
+    </select>
+
+    <select id="countBySlugAndIdNot" resultType="long">
+        SELECT COUNT(1) FROM posts WHERE slug = #{slug} AND id != #{id}
+    </select>
+
+    <select id="countPublicPosts" resultType="long">
+        SELECT COUNT(DISTINCT p.id)
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        LEFT JOIN post_tags pt ON pt.post_id = p.id
+        LEFT JOIN tags t ON t.id = pt.tag_id
+        WHERE p.status = 'PUBLISHED'
+        <if test="keyword != null and keyword != ''">
+            AND (
+                LOWER(p.title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(p.summary) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            )
+        </if>
+        <if test="categorySlug != null and categorySlug != ''">
+            AND c.slug = #{categorySlug}
+        </if>
+        <if test="tagSlug != null and tagSlug != ''">
+            AND t.slug = #{tagSlug}
+        </if>
+    </select>
+
+    <select id="selectPublicPosts" resultMap="PostResultMap">
+        SELECT DISTINCT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        LEFT JOIN post_tags pt ON pt.post_id = p.id
+        LEFT JOIN tags t ON t.id = pt.tag_id
+        WHERE p.status = 'PUBLISHED'
+        <if test="keyword != null and keyword != ''">
+            AND (
+                LOWER(p.title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(p.summary) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            )
+        </if>
+        <if test="categorySlug != null and categorySlug != ''">
+            AND c.slug = #{categorySlug}
+        </if>
+        <if test="tagSlug != null and tagSlug != ''">
+            AND t.slug = #{tagSlug}
+        </if>
+        ORDER BY p.published_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="selectTopPublished" resultMap="PostResultMap">
+        SELECT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE p.status = #{status}
+        ORDER BY p.published_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectTopFeaturedPublished" resultMap="PostResultMap">
+        SELECT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE p.status = #{status} AND p.featured = 1
+        ORDER BY p.published_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectAllPublishedForRag" resultMap="PostResultMap">
+        SELECT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE p.status = #{status}
+        ORDER BY p.published_at DESC, p.updated_at DESC
+    </select>
+
+    <select id="selectById" resultMap="PostResultMap">
+        SELECT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE p.id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectBySlugAndStatus" resultMap="PostResultMap">
+        SELECT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE p.slug = #{slug} AND p.status = #{status}
+        LIMIT 1
+    </select>
+
+    <select id="countAdminPosts" resultType="long">
+        SELECT COUNT(DISTINCT p.id)
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE 1 = 1
+        <if test="keyword != null and keyword != ''">
+            AND (
+                LOWER(p.title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(p.summary) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(p.slug) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            )
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        <if test="categoryId != null">
+            AND p.category_id = #{categoryId}
+        </if>
+    </select>
+
+    <select id="selectAdminPosts" resultMap="PostResultMap">
+        SELECT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        WHERE 1 = 1
+        <if test="keyword != null and keyword != ''">
+            AND (
+                LOWER(p.title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(p.summary) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(p.slug) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            )
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        <if test="categoryId != null">
+            AND p.category_id = #{categoryId}
+        </if>
+        ORDER BY p.updated_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="selectRecentUpdated" resultMap="PostResultMap">
+        SELECT
+        <include refid="BasePostColumns"/>
+        FROM posts p
+        INNER JOIN categories c ON c.id = p.category_id
+        ORDER BY p.updated_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.entity.Post" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO posts (
+            title, slug, summary, cover_image, content, status, allow_comment, featured,
+            view_count, published_at, category_id, created_at, updated_at
+        ) VALUES (
+            #{title}, #{slug}, #{summary}, #{coverImage}, #{content}, #{status}, #{allowComment}, #{featured},
+            #{viewCount}, #{publishedAt}, #{categoryId}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <update id="update" parameterType="com.hejulian.blog.entity.Post">
+        UPDATE posts
+        SET title = #{title},
+            slug = #{slug},
+            summary = #{summary},
+            cover_image = #{coverImage},
+            content = #{content},
+            status = #{status},
+            allow_comment = #{allowComment},
+            featured = #{featured},
+            view_count = #{viewCount},
+            published_at = #{publishedAt},
+            category_id = #{categoryId},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <update id="incrementViewCount">
+        UPDATE posts
+        SET view_count = view_count + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM posts WHERE id = #{id}
+    </delete>
+
+    <delete id="deletePostTags">
+        DELETE FROM post_tags WHERE post_id = #{postId}
+    </delete>
+
+    <insert id="insertPostTags">
+        INSERT INTO post_tags (post_id, tag_id)
+        VALUES
+        <foreach collection="tagIds" item="tagId" separator=",">
+            (#{postId}, #{tagId})
+        </foreach>
+    </insert>
+
+</mapper>

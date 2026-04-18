@@ -1,0 +1,101 @@
+server:
+  port: 8080
+  shutdown: graceful
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: hejulian-blog
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: ${BLOG_DB_URL:jdbc:mysql://localhost:3306/hejulian_blog?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${BLOG_DB_USERNAME:hejulian_blog}
+    password: ${BLOG_DB_PASSWORD:change_me}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${BLOG_REDIS_HOST:localhost}
+      port: ${BLOG_REDIS_PORT:6379}
+      password: ${BLOG_REDIS_PASSWORD:}
+      database: ${BLOG_REDIS_DATABASE:0}
+      timeout: 5s
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m
+      cache-null-values: false
+  jackson:
+    time-zone: Asia/Shanghai
+
+mybatis:
+  mapper-locations: classpath:/mapper/*.xml
+  type-aliases-package: com.hejulian.blog.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: HeJulian Blog
+    description: Personal blog system based on Vue 3 and Spring Boot
+    version: 1.0.0
+
+blog:
+  site:
+    name: HeJulian Blog
+    hero-title: Build Once, Write for Years
+    hero-subtitle: A personal blog system built with Vue 3 and Spring Boot for writing, taxonomy management, comment moderation, and admin operations.
+  rag:
+    chunk-size: ${BLOG_RAG_CHUNK_SIZE:520}
+    chunk-overlap: ${BLOG_RAG_CHUNK_OVERLAP:120}
+    default-top-k: ${BLOG_RAG_TOP_K:4}
+    min-score: ${BLOG_RAG_MIN_SCORE:0.2}
+    recall-multiplier: ${BLOG_RAG_RECALL_MULTIPLIER:4}
+    stream-timeout-millis: ${BLOG_RAG_STREAM_TIMEOUT_MILLIS:900000}
+    embedding:
+      enabled: ${BLOG_RAG_EMBEDDING_ENABLED:false}
+      base-url: ${BLOG_RAG_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${BLOG_RAG_EMBEDDING_API_KEY:}
+      model: ${BLOG_RAG_EMBEDDING_MODEL:text-embedding-v4}
+      dimensions: ${BLOG_RAG_EMBEDDING_DIMENSIONS:1024}
+      batch-size: ${BLOG_RAG_EMBEDDING_BATCH_SIZE:10}
+    rerank:
+      enabled: ${BLOG_RAG_RERANK_ENABLED:false}
+      base-url: ${BLOG_RAG_RERANK_BASE_URL:https://dashscope.aliyuncs.com/compatible-api/v1}
+      api-key: ${BLOG_RAG_RERANK_API_KEY:}
+      model: ${BLOG_RAG_RERANK_MODEL:qwen3-rerank}
+      instruct: ${BLOG_RAG_RERANK_INSTRUCT:Given a web search query, retrieve relevant passages that answer the query.}
+    qdrant:
+      enabled: ${BLOG_RAG_QDRANT_ENABLED:false}
+      base-url: ${BLOG_RAG_QDRANT_BASE_URL:http://localhost:6333}
+      api-key: ${BLOG_RAG_QDRANT_API_KEY:}
+      collection: ${BLOG_RAG_QDRANT_COLLECTION:blog_knowledge_chunks}
+      timeout-seconds: ${BLOG_RAG_QDRANT_TIMEOUT_SECONDS:10}
+      on-disk-payload: ${BLOG_RAG_QDRANT_ON_DISK_PAYLOAD:true}
+    python-bridge:
+      enabled: ${BLOG_RAG_PYTHON_BRIDGE_ENABLED:false}
+      base-url: ${BLOG_RAG_PYTHON_BRIDGE_BASE_URL:http://host.docker.internal:8090}
+      timeout-seconds: ${BLOG_RAG_PYTHON_BRIDGE_TIMEOUT_SECONDS:600}
+    generator:
+      enabled: ${BLOG_RAG_GENERATOR_ENABLED:false}
+      base-url: ${BLOG_RAG_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${BLOG_RAG_API_KEY:}
+      model: ${BLOG_RAG_MODEL:qwen-max}
+      timeout-seconds: ${BLOG_RAG_GENERATOR_TIMEOUT_SECONDS:180}
+  jwt:
+    secret: c3ByaW5nLWJvb3QtanNwLWFkbWluLWp3dC1zZWNyZXQta2V5LWZvci1oZWp1bGlhbi1ibG9n
+    expiration-millis: 604800000

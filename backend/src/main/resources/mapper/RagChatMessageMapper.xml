@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.mapper.RagChatMessageMapper">
+
+    <resultMap id="RagChatMessageResultMap" type="com.hejulian.blog.entity.RagChatMessage">
+        <id property="id" column="id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="role" column="role"/>
+        <result property="content" column="content"/>
+        <result property="answerMode" column="answer_mode"/>
+        <result property="citationsJson" column="citations_json"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectBySessionId" resultMap="RagChatMessageResultMap">
+        SELECT id, session_id, role, content, answer_mode, citations_json, created_at
+        FROM rag_chat_messages
+        WHERE session_id = #{sessionId}
+        ORDER BY id ASC
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.entity.RagChatMessage" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_chat_messages (
+            session_id, role, content, answer_mode, citations_json, created_at
+        ) VALUES (
+            #{sessionId}, #{role}, #{content}, #{answerMode}, #{citationsJson}, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+</mapper>
