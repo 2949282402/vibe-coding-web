@@ -35,7 +35,7 @@ const login = async () => {
       <div>
         <span class="hero-kicker">{{ preferences.t('login.adminAccess') }}</span>
         <h1>{{ preferences.t('login.enterConsole') }}</h1>
-        <p class="muted">{{ preferences.t('login.defaultAccount') }}</p>
+        <p class="muted login-copy">{{ preferences.t('login.defaultAccount') }}</p>
       </div>
 
       <el-form label-position="top" @submit.prevent="login">
@@ -63,6 +63,12 @@ const login = async () => {
     linear-gradient(180deg, #080808 0%, #030303 100%);
 }
 
+html[data-theme='light'] .login-shell {
+  background:
+    radial-gradient(circle at top, rgba(0, 0, 0, 0.05), transparent 24%),
+    linear-gradient(180deg, #f7f7f4 0%, #ecece8 100%);
+}
+
 .login-toolbar {
   position: fixed;
   top: 24px;
@@ -71,15 +77,20 @@ const login = async () => {
 }
 
 .login-card {
-  width: min(480px, 100%);
-  padding: 34px;
+  width: min(500px, 100%);
+  padding: 36px;
+}
+
+.login-copy {
+  margin: 0 0 6px;
+  line-height: 1.8;
 }
 
 h1 {
   margin: 0 0 10px;
-  font-size: 2.6rem;
-  letter-spacing: -0.04em;
-  text-transform: uppercase;
+  font-size: clamp(2.2rem, 6vw, 2.8rem);
+  letter-spacing: -0.05em;
+  text-transform: none;
 }
 
 .full {
@@ -100,6 +111,10 @@ h1 {
 
   .login-shell {
     place-items: start stretch;
+  }
+
+  .login-card {
+    padding: 26px;
   }
 }
 </style>

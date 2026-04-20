@@ -63,8 +63,7 @@ public class AdminPostController {
                 request.status(),
                 request.featured(),
                 request.allowComment(),
-                request.categoryId(),
-                request.tagIds()
+                request.tags()
         );
         return ApiResponse.success("Post updated successfully", adminBlogService.savePost(payload));
     }

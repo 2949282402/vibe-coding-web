@@ -116,8 +116,22 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
                 entity.getContent(),
                 entity.getAnswerMode(),
                 readCitations(entity.getCitationsJson()),
-                entity.getCreatedAt()
+                readSources(entity.getSourcesJson()),
+                entity.getCreatedAt(),
+                entity.getFeedbackHelpful(),
+                entity.getFeedbackNote(),
+                entity.getFeedbackAt()
         );
+    }
+
+    @Override
+    public ChatHistoryMessage updateConversationFeedback(String sessionId, Long messageId, Boolean helpful, String note) {
+        ragChatMessageMapper.updateFeedback(messageId, helpful, note);
+        return ragChatMessageMapper.selectBySessionId(sessionId).stream()
+                .filter(message -> message.getId().equals(messageId))
+                .findFirst()
+                .map(this::toHistoryMessage)
+                .orElse(null);
     }
 
     @Override
@@ -219,7 +233,11 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
                 entity.getContent(),
                 entity.getAnswerMode(),
                 readCitations(entity.getCitationsJson()),
-                entity.getCreatedAt()
+                readSources(entity.getSourcesJson()),
+                entity.getCreatedAt(),
+                entity.getFeedbackHelpful(),
+                entity.getFeedbackNote(),
+                entity.getFeedbackAt()
         );
     }
 
@@ -231,7 +249,11 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
         entity.setContent(message.content());
         entity.setAnswerMode(message.mode());
         entity.setCitationsJson(writeCitations(message.citations()));
+        entity.setSourcesJson(writeSources(message.sources()));
         entity.setCreatedAt(message.createdAt());
+        entity.setFeedbackHelpful(message.feedbackHelpful());
+        entity.setFeedbackNote(message.feedbackNote());
+        entity.setFeedbackAt(message.feedbackAt());
         return entity;
     }
 
@@ -294,6 +316,29 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
             return OBJECT_MAPPER.writeValueAsString(citations);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to serialize citations", ex);
+        }
+    }
+
+    private List<com.hejulian.blog.dto.RagDtos.Source> readSources(String sourcesJson) {
+        if (!StringUtils.hasText(sourcesJson)) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readerForListOf(com.hejulian.blog.dto.RagDtos.Source.class).readValue(sourcesJson);
+        } catch (Exception ex) {
+            log.warn("Failed to parse sources: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private String writeSources(List<com.hejulian.blog.dto.RagDtos.Source> sources) {
+        if (sources == null || sources.isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(sources);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to serialize sources", ex);
         }
     }
 

@@ -27,6 +27,8 @@ Request:
   Runs retrieval-augmented question answering over published blog content.
 - `GET /api/public/rag/history`
   Returns the current RAG conversation history by `sessionId`.
+- `POST /api/public/rag/feedback`
+  Stores helpful/not-helpful feedback for an assistant answer.
 - `POST /api/public/rag/ask/stream`
   Streams RAG answers over Server-Sent Events for slow local models.
 
@@ -63,6 +65,7 @@ RAG response fields:
 - `history`: chat history in the current session
 - `strictCitation`: whether the answer is enforced to include citations
 - `followUpQuestions`: suggested follow-up prompts
+- `feedbackHelpful`, `feedbackNote`, `feedbackAt`: stored answer feedback state
 
 Generation notes:
 
@@ -83,6 +86,11 @@ Authorization: Bearer <token>
 ```
 
 - `GET /api/admin/dashboard`
+  Returns content metrics plus RAG feedback summary and recent feedback entries.
+- `GET /api/admin/rag-feedback`
+  Returns paged RAG feedback entries with `helpful`, `keyword`, `feedbackDateFrom`, and `feedbackDateTo` filters.
+- `GET /api/admin/rag-feedback/export`
+  Exports filtered RAG feedback as CSV.
 - `GET /api/admin/posts`
 - `GET /api/admin/posts/{id}`
 - `POST /api/admin/posts`

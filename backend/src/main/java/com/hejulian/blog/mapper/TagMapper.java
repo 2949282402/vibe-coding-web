@@ -10,6 +10,8 @@ public interface TagMapper {
 
     Tag selectById(@Param("id") Long id);
 
+    Tag selectBySlug(@Param("slug") String slug);
+
     List<Tag> selectByIds(@Param("ids") List<Long> ids);
 
     List<Tag> selectTagsByPostId(@Param("postId") Long postId);
@@ -28,4 +30,3 @@ public interface TagMapper {
 
     int deleteById(@Param("id") Long id);
 }
-

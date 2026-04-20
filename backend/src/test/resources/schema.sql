@@ -105,6 +105,10 @@ CREATE TABLE rag_chat_messages (
     content CLOB NOT NULL,
     answer_mode VARCHAR(16),
     citations_json CLOB,
+    sources_json CLOB,
+    feedback_helpful BOOLEAN,
+    feedback_note VARCHAR(1000),
+    feedback_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

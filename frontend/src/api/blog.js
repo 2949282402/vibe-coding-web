@@ -15,6 +15,7 @@ export const deleteKnowledgeSessionApi = (sessionId) =>
   http.delete(`/public/rag/sessions/${sessionId}`);
 export const restoreKnowledgeSessionApi = (sessionId) =>
   http.post(`/public/rag/sessions/${sessionId}/restore`);
+export const submitKnowledgeFeedbackApi = (payload) => http.post('/public/rag/feedback', payload);
 export const askKnowledgeApi = (payload) => http.post('/public/rag/ask', payload, { timeout: 300000 });
 
 export const askKnowledgeStreamApi = async (payload, handlers = {}) => {

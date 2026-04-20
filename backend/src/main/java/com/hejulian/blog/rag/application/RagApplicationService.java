@@ -7,7 +7,10 @@ import com.hejulian.blog.rag.domain.model.ChatHistoryMessage;
 import com.hejulian.blog.rag.domain.model.ConversationSession;
 import com.hejulian.blog.rag.domain.model.IndexState;
 import com.hejulian.blog.rag.domain.model.KnowledgeChunk;
+import com.hejulian.blog.rag.domain.model.RagEvidence;
 import com.hejulian.blog.rag.domain.model.ScoredChunk;
+import com.hejulian.blog.rag.domain.model.WebSearchAnswer;
+import com.hejulian.blog.rag.domain.model.WebSearchSource;
 import com.hejulian.blog.rag.domain.port.ChatModel;
 import com.hejulian.blog.rag.domain.port.EmbeddingModel;
 import com.hejulian.blog.rag.domain.port.KnowledgeBaseRepository;
@@ -20,7 +23,9 @@ import com.hejulian.blog.rag.domain.service.RagPromptService;
 import jakarta.annotation.Nullable;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.springframework.http.HttpStatus;
@@ -38,6 +43,10 @@ public class RagApplicationService {
 
     private static final int MAX_PROMPT_HISTORY_MESSAGES = 8;
     private static final int MAX_RESPONSE_HISTORY_MESSAGES = 20;
+    private static final String SEARCH_MODE_LOCAL_ONLY = "LOCAL_ONLY";
+    private static final String SEARCH_MODE_LOCAL_AND_WEB = "LOCAL_AND_WEB";
+    private static final String SOURCE_TYPE_BLOG = "blog";
+    private static final String SOURCE_TYPE_WEB = "web";
 
     private final RagProperties ragProperties;
     private final RagIndexingApplicationService indexingService;
@@ -59,15 +68,42 @@ public class RagApplicationService {
                     context.question(),
                     context.prebuiltResponse().answer(),
                     context.prebuiltResponse().mode(),
-                    List.of()
+                    List.of(),
+                    context.prebuiltResponse().sources()
             );
             return buildAnswerResponse(
                     context,
                     context.prebuiltResponse().answer(),
                     context.prebuiltResponse().mode(),
+                    context.prebuiltResponse().followUpQuestions(),
+                    context.prebuiltResponse().sources(),
                     history,
                     context.prebuiltResponse().strictCitation()
             );
+        }
+
+        if (SEARCH_MODE_LOCAL_AND_WEB.equals(context.searchMode()) && chatModel.supportsWebSearch()) {
+            WebSearchResolution resolution = resolveWithOfficialWebSearch(context);
+            if (resolution != null) {
+                List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
+                List<RagDtos.ChatMessage> history = persistConversation(
+                        context.sessionId(),
+                        context.question(),
+                        resolution.answer(),
+                        resolution.mode(),
+                        citations,
+                        resolution.sources()
+                );
+                return buildAnswerResponse(
+                        context,
+                        resolution.answer(),
+                        resolution.mode(),
+                        resolution.followUpQuestions(),
+                        resolution.sources(),
+                        history,
+                        resolution.strictCitation()
+                );
+            }
         }
 
         String answer = context.retrievalAnswer();
@@ -76,7 +112,7 @@ public class RagApplicationService {
         if (chatModel.isChatConfigured()) {
             String generated = chatModel.generate(
                     promptService.buildSystemPrompt(context.question()),
-                    promptService.buildUserPrompt(context.question(), context.rankedChunks(), recentPromptHistory(context.history())),
+                    promptService.buildUserPrompt(context.question(), context.evidences(), recentPromptHistory(context.history())),
                     0.2
             );
             if (citationGuardService.isStrictlyCited(generated, context.sources().size())) {
@@ -86,8 +122,15 @@ public class RagApplicationService {
         }
 
         List<Integer> citations = citationGuardService.extractCitationIndices(answer, context.sources().size());
-        List<RagDtos.ChatMessage> history = persistConversation(context.sessionId(), context.question(), answer, mode, citations);
-        return buildAnswerResponse(context, answer, mode, history, true);
+        List<RagDtos.ChatMessage> history = persistConversation(
+                context.sessionId(),
+                context.question(),
+                answer,
+                mode,
+                citations,
+                context.sources()
+        );
+        return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true);
     }
 
     public SseEmitter streamQuestion(RagDtos.AskRequest request) {
@@ -142,6 +185,30 @@ public class RagApplicationService {
         return toSessionSummary(knowledgeBaseRepository.findConversationSession(normalizedSessionId));
     }
 
+    public RagDtos.ChatMessage submitFeedback(RagDtos.FeedbackRequest request) {
+        String sessionId = normalizeSessionId(request.sessionId());
+        List<ChatHistoryMessage> history = knowledgeBaseRepository.loadConversationHistory(sessionId);
+        ChatHistoryMessage target = history.stream()
+                .filter(message -> Objects.equals(message.id(), request.messageId()))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation message not found"));
+
+        if (!"assistant".equals(target.role())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only assistant messages can receive feedback");
+        }
+
+        ChatHistoryMessage updated = knowledgeBaseRepository.updateConversationFeedback(
+                sessionId,
+                target.id(),
+                request.helpful(),
+                normalizeFeedbackNote(request.note())
+        );
+        if (updated == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation message not found");
+        }
+        return toDtoMessage(updated);
+    }
+
     private void streamQuestionInternal(RagDtos.AskRequest request, SseEmitter emitter) {
         AnswerContext context = buildAnswerContext(request);
         if (context.prebuiltResponse() != null) {
@@ -150,7 +217,8 @@ public class RagApplicationService {
                     context.question(),
                     context.prebuiltResponse().answer(),
                     context.prebuiltResponse().mode(),
-                    List.of()
+                    List.of(),
+                    context.prebuiltResponse().sources()
             );
             sendEvent(
                     emitter,
@@ -160,6 +228,8 @@ public class RagApplicationService {
                             context,
                             context.prebuiltResponse().answer(),
                             context.prebuiltResponse().mode(),
+                            context.prebuiltResponse().followUpQuestions(),
+                            context.prebuiltResponse().sources(),
                             history,
                             context.prebuiltResponse().strictCitation()
                     ),
@@ -169,11 +239,59 @@ public class RagApplicationService {
             return;
         }
 
+        if (SEARCH_MODE_LOCAL_AND_WEB.equals(context.searchMode()) && chatModel.supportsWebSearch()) {
+            sendEvent(
+                    emitter,
+                    "meta",
+                    null,
+                    buildAnswerResponse(context, "", "llm", context.followUpQuestions(), context.sources(), context.history(), false),
+                    null
+            );
+
+            WebSearchResolution resolution = resolveWithOfficialWebSearch(context);
+            if (resolution != null) {
+                List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
+                List<RagDtos.ChatMessage> history = persistConversation(
+                        context.sessionId(),
+                        context.question(),
+                        resolution.answer(),
+                        resolution.mode(),
+                        citations,
+                        resolution.sources()
+                );
+                sendEvent(
+                        emitter,
+                        "done",
+                        null,
+                        buildAnswerResponse(
+                                context,
+                                resolution.answer(),
+                                resolution.mode(),
+                                resolution.followUpQuestions(),
+                                resolution.sources(),
+                                history,
+                                resolution.strictCitation()
+                        ),
+                        null
+                );
+                emitter.complete();
+                return;
+            }
+        }
+
         sendEvent(
                 emitter,
                 "meta",
                 null,
-                buildAnswerResponse(context, "", chatModel.isChatConfigured() ? "llm" : "retrieval", context.history(), true),
+                buildAnswerResponse(
+                        context,
+                        "",
+                        chatModel.isChatConfigured() ? "llm" : "retrieval",
+                        context.followUpQuestions(),
+                        context.sources(),
+                        context.history(),
+                        true
+                ),
                 null
         );
 
@@ -183,7 +301,7 @@ public class RagApplicationService {
         if (chatModel.isChatConfigured()) {
             String generated = chatModel.streamGenerate(
                     promptService.buildSystemPrompt(context.question()),
-                    promptService.buildUserPrompt(context.question(), context.rankedChunks(), recentPromptHistory(context.history())),
+                    promptService.buildUserPrompt(context.question(), context.evidences(), recentPromptHistory(context.history())),
                     0.2,
                     delta -> sendEvent(emitter, "delta", delta, null, null)
             );
@@ -194,21 +312,36 @@ public class RagApplicationService {
         }
 
         List<Integer> citations = citationGuardService.extractCitationIndices(answer, context.sources().size());
-        List<RagDtos.ChatMessage> history = persistConversation(context.sessionId(), context.question(), answer, mode, citations);
-        sendEvent(emitter, "done", null, buildAnswerResponse(context, answer, mode, history, true), null);
+        List<RagDtos.ChatMessage> history = persistConversation(
+                context.sessionId(),
+                context.question(),
+                answer,
+                mode,
+                citations,
+                context.sources()
+        );
+        sendEvent(
+                emitter,
+                "done",
+                null,
+                buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true),
+                null
+        );
         emitter.complete();
     }
 
     private AnswerContext buildAnswerContext(RagDtos.AskRequest request) {
         String sessionId = normalizeSessionId(request.sessionId());
         String question = request.question().trim();
+        String requestedSearchMode = normalizeSearchMode(request.searchMode());
         List<RagDtos.ChatMessage> history = toDtoHistory(
                 limitHistory(knowledgeBaseRepository.loadConversationHistory(sessionId), MAX_RESPONSE_HISTORY_MESSAGES)
         );
         IndexState indexState = indexingService.ensureIndexReady();
-        List<KnowledgeChunk> chunks = List.of();
+        boolean webSearchRequested = isWebSearchRequested(requestedSearchMode);
+        String searchMode = webSearchRequested ? SEARCH_MODE_LOCAL_AND_WEB : SEARCH_MODE_LOCAL_ONLY;
 
-        if (indexState.chunkCount() == 0) {
+        if (indexState.chunkCount() == 0 && !webSearchRequested) {
             RagDtos.AskResponse response = new RagDtos.AskResponse(
                     sessionId,
                     question,
@@ -220,14 +353,33 @@ public class RagApplicationService {
                     promptService.localizedFallbackSuggestions(question),
                     List.of(),
                     history,
-                    true
+                    true,
+                    searchMode
             );
-            return new AnswerContext(sessionId, question, indexState, List.of(), List.of(), response.answer(), response.followUpQuestions(), history, false, response);
+            return new AnswerContext(
+                    sessionId,
+                    question,
+                    indexState,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    response.answer(),
+                    response.followUpQuestions(),
+                    history,
+                    false,
+                    searchMode,
+                    response
+            );
         }
 
         int topK = normalizeTopK(request.topK());
-        List<ScoredChunk> recalled = recallChunks(question, topK);
-        if (recalled.isEmpty()) {
+        List<ScoredChunk> recalled = indexState.chunkCount() > 0 ? recallChunks(question, topK) : List.of();
+        List<ScoredChunk> rankedChunks = recalled.isEmpty()
+                ? List.of()
+                : retrievalService.rerank(question, recalled, topK, rerankModel);
+
+        List<RagEvidence> evidences = new ArrayList<>(buildBlogEvidence(rankedChunks));
+        if (evidences.isEmpty() && !webSearchRequested) {
             RagDtos.AskResponse response = new RagDtos.AskResponse(
                     sessionId,
                     question,
@@ -239,24 +391,45 @@ public class RagApplicationService {
                     promptService.localizedFallbackSuggestions(question),
                     List.of(),
                     history,
-                    true
+                    true,
+                    searchMode
             );
-            return new AnswerContext(sessionId, question, indexState, List.of(), List.of(), response.answer(), response.followUpQuestions(), history, false, response);
+            return new AnswerContext(
+                    sessionId,
+                    question,
+                    indexState,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    response.answer(),
+                    response.followUpQuestions(),
+                    history,
+                    false,
+                    searchMode,
+                    response
+            );
         }
 
-        List<ScoredChunk> rankedChunks = retrievalService.rerank(question, recalled, topK, rerankModel);
-        List<RagDtos.Source> sources = buildSources(rankedChunks);
+        List<RagDtos.Source> sources = buildSources(evidences);
+        String retrievalAnswer = evidences.isEmpty()
+                ? promptService.localizedNoMatchAnswer(question)
+                : promptService.buildStrictRetrievalAnswer(question, evidences);
+        List<String> followUpQuestions = sources.isEmpty()
+                ? promptService.localizedFallbackSuggestions(question)
+                : promptService.buildFollowUpQuestions(question, sources);
 
         return new AnswerContext(
                 sessionId,
                 question,
                 indexState,
                 rankedChunks,
+                evidences,
                 sources,
-                promptService.buildStrictRetrievalAnswer(question, rankedChunks),
-                promptService.buildFollowUpQuestions(question, sources),
+                retrievalAnswer,
+                followUpQuestions,
                 history,
                 chatModel.isChatConfigured(),
+                searchMode,
                 null
         );
     }
@@ -285,20 +458,47 @@ public class RagApplicationService {
         );
     }
 
-    private List<RagDtos.Source> buildSources(List<ScoredChunk> rankedChunks) {
+    private List<RagEvidence> buildBlogEvidence(List<ScoredChunk> rankedChunks) {
         return rankedChunks.stream()
-                .map(scored -> new RagDtos.Source(
-                        scored.chunk().postId(),
+                .map(scored -> new RagEvidence(
+                        SOURCE_TYPE_BLOG,
                         scored.chunk().postTitle(),
                         scored.chunk().postSlug(),
-                        textProcessor.summarizeExcerpt(scored.chunk().content()),
+                        scored.chunk().content(),
                         roundScore(scored.score()),
-                        rankedChunks.indexOf(scored) + 1
+                        rankedChunks.indexOf(scored) + 1,
+                        scored.chunk().postId(),
+                        scored.chunk().postSlug(),
+                        null,
+                        null
                 ))
                 .toList();
     }
 
-    private List<RagDtos.ChatMessage> persistConversation(String sessionId, String question, String answer, String mode, List<Integer> citations) {
+    private List<RagDtos.Source> buildSources(List<RagEvidence> evidences) {
+        return evidences.stream()
+                .map(evidence -> new RagDtos.Source(
+                        evidence.postId(),
+                        evidence.title(),
+                        evidence.slug(),
+                        textProcessor.summarizeExcerpt(evidence.content()),
+                        roundScore(evidence.score()),
+                        evidence.citationIndex(),
+                        evidence.sourceType(),
+                        evidence.url(),
+                        evidence.domain()
+                ))
+                .toList();
+    }
+
+    private List<RagDtos.ChatMessage> persistConversation(
+            String sessionId,
+            String question,
+            String answer,
+            String mode,
+            List<Integer> citations,
+            List<RagDtos.Source> sources
+    ) {
         knowledgeBaseRepository.saveConversationMessage(new ChatHistoryMessage(
                 null,
                 sessionId,
@@ -306,7 +506,11 @@ public class RagApplicationService {
                 question,
                 null,
                 List.of(),
-                LocalDateTime.now()
+                List.of(),
+                LocalDateTime.now(),
+                null,
+                null,
+                null
         ));
         knowledgeBaseRepository.saveConversationMessage(new ChatHistoryMessage(
                 null,
@@ -315,7 +519,11 @@ public class RagApplicationService {
                 answer,
                 mode,
                 citations,
-                LocalDateTime.now()
+                sources,
+                LocalDateTime.now(),
+                null,
+                null,
+                null
         ));
         List<ChatHistoryMessage> savedHistory = knowledgeBaseRepository.loadConversationHistory(sessionId);
         knowledgeBaseRepository.saveOrUpdateConversationSession(
@@ -329,15 +537,23 @@ public class RagApplicationService {
 
     private List<RagDtos.ChatMessage> toDtoHistory(List<ChatHistoryMessage> historyMessages) {
         return historyMessages.stream()
-                .map(message -> new RagDtos.ChatMessage(
-                        message.id(),
-                        message.role(),
-                        message.content(),
-                        message.mode(),
-                        message.citations(),
-                        message.createdAt()
-                ))
+                .map(this::toDtoMessage)
                 .toList();
+    }
+
+    private RagDtos.ChatMessage toDtoMessage(ChatHistoryMessage message) {
+        return new RagDtos.ChatMessage(
+                message.id(),
+                message.role(),
+                message.content(),
+                message.mode(),
+                message.citations(),
+                message.sources(),
+                message.createdAt(),
+                message.feedbackHelpful(),
+                message.feedbackNote(),
+                message.feedbackAt()
+        );
     }
 
     private List<ChatHistoryMessage> recentPromptHistory(List<RagDtos.ChatMessage> history) {
@@ -349,7 +565,11 @@ public class RagApplicationService {
                         message.content(),
                         message.mode(),
                         message.citations(),
-                        message.createdAt()
+                        message.sources(),
+                        message.createdAt(),
+                        message.feedbackHelpful(),
+                        message.feedbackNote(),
+                        message.feedbackAt()
                 ))
                 .skip(Math.max(0, history.size() - MAX_PROMPT_HISTORY_MESSAGES))
                 .toList();
@@ -393,6 +613,14 @@ public class RagApplicationService {
         return input.trim().replaceAll("\\s+", " ");
     }
 
+    private String normalizeFeedbackNote(String note) {
+        String normalized = collapseWhitespace(note);
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        return normalized.length() > 1000 ? normalized.substring(0, 1000).trim() : normalized;
+    }
+
     private int normalizeTopK(Integer requestedTopK) {
         if (requestedTopK == null) {
             return Math.min(Math.max(ragProperties.getDefaultTopK(), 1), 8);
@@ -422,6 +650,8 @@ public class RagApplicationService {
             AnswerContext context,
             String answer,
             String mode,
+            List<String> followUpQuestions,
+            List<RagDtos.Source> sources,
             List<RagDtos.ChatMessage> history,
             boolean strictCitation
     ) {
@@ -433,11 +663,100 @@ public class RagApplicationService {
                 chatModel.isChatConfigured(),
                 context.indexState().postCount(),
                 context.indexState().chunkCount(),
-                context.followUpQuestions(),
-                context.sources(),
+                followUpQuestions,
+                sources,
                 history,
-                strictCitation
+                strictCitation,
+                context.searchMode()
         );
+    }
+
+    private String normalizeSearchMode(String searchMode) {
+        if (SEARCH_MODE_LOCAL_AND_WEB.equalsIgnoreCase(searchMode)) {
+            return SEARCH_MODE_LOCAL_AND_WEB;
+        }
+        return SEARCH_MODE_LOCAL_ONLY;
+    }
+
+    private boolean isWebSearchRequested(String searchMode) {
+        return SEARCH_MODE_LOCAL_AND_WEB.equals(searchMode) && chatModel.supportsWebSearch();
+    }
+
+    @Nullable
+    private WebSearchResolution resolveWithOfficialWebSearch(AnswerContext context) {
+        WebSearchAnswer webSearchAnswer = chatModel.generateWithWebSearch(
+                promptService.buildWebSearchSystemPrompt(context.question()),
+                promptService.buildWebSearchUserPrompt(context.question(), context.evidences(), recentPromptHistory(context.history())),
+                0.2
+        );
+        if (webSearchAnswer == null) {
+            return null;
+        }
+
+        List<RagDtos.Source> mergedSources = mergeSources(context.sources(), webSearchAnswer.sources());
+        List<String> followUpQuestions = promptService.buildFollowUpQuestions(context.question(), mergedSources);
+        String answer = normalizeWebSearchAnswer(webSearchAnswer.answer(), context.sources().size());
+        if (!StringUtils.hasText(answer)) {
+            answer = context.retrievalAnswer();
+        }
+        return new WebSearchResolution(answer, mergedSources, followUpQuestions, "llm", false);
+    }
+
+    private List<RagDtos.Source> mergeSources(List<RagDtos.Source> localSources, List<WebSearchSource> webSources) {
+        List<RagDtos.Source> merged = new ArrayList<>(localSources);
+        int localCount = localSources.size();
+        for (WebSearchSource source : webSources) {
+            String domain = extractDomain(source.url());
+            merged.add(new RagDtos.Source(
+                    null,
+                    StringUtils.hasText(source.title()) ? source.title() : defaultWebSourceTitle(source.url()),
+                    null,
+                    StringUtils.hasText(source.siteName()) ? source.siteName() : domain,
+                    roundScore(Math.max(0.3D, 0.9D - (source.index() * 0.06D))),
+                    localCount + source.index(),
+                    SOURCE_TYPE_WEB,
+                    source.url(),
+                    domain
+            ));
+        }
+        return List.copyOf(merged);
+    }
+
+    private String normalizeWebSearchAnswer(String answer, int localSourceCount) {
+        if (!StringUtils.hasText(answer)) {
+            return "";
+        }
+
+        String normalized = answer.trim();
+        for (int index = 1; index <= 12; index++) {
+            normalized = normalized.replace("[ref_" + index + "]", "[" + (localSourceCount + index) + "]");
+        }
+        return normalized;
+    }
+
+    private String extractDomain(String url) {
+        if (!StringUtils.hasText(url)) {
+            return "";
+        }
+
+        String normalized = url.replaceFirst("^https?://", "");
+        int slashIndex = normalized.indexOf('/');
+        String host = slashIndex >= 0 ? normalized.substring(0, slashIndex) : normalized;
+        return host.startsWith("www.") ? host.substring(4) : host;
+    }
+
+    private String defaultWebSourceTitle(String url) {
+        String domain = extractDomain(url);
+        return StringUtils.hasText(domain) ? domain : "Web result";
+    }
+
+    private record WebSearchResolution(
+            String answer,
+            List<RagDtos.Source> sources,
+            List<String> followUpQuestions,
+            String mode,
+            boolean strictCitation
+    ) {
     }
 
     private double roundScore(double score) {

@@ -11,7 +11,7 @@ const hideFooter = computed(() => Boolean(route.meta.hideFooter));
 
 const navItems = computed(() => [
   { label: preferences.t('main.navHome'), to: '/' },
-  { label: preferences.locale === 'zh-CN' ? '知识问答' : 'Knowledge', to: '/knowledge' },
+  { label: preferences.t('main.navKnowledge'), to: '/knowledge' },
   { label: preferences.t('main.navArchive'), to: '/archives' },
   { label: preferences.t('main.navCategories'), to: '/categories' },
   { label: preferences.t('main.navConsole'), to: '/admin' }
@@ -30,7 +30,7 @@ const navItems = computed(() => [
       </router-link>
 
       <div class="topbar-actions">
-        <nav class="nav">
+        <nav class="nav glass-subnav">
           <router-link v-for="item in navItems" :key="item.to" :to="item.to">
             {{ item.label }}
           </router-link>
@@ -65,6 +65,16 @@ const navItems = computed(() => [
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 30%, transparent 70%, rgba(255, 255, 255, 0.03));
+  opacity: 0.8;
 }
 
 .topbar-immersive {
@@ -124,6 +134,14 @@ const navItems = computed(() => [
   flex-wrap: wrap;
 }
 
+.glass-subnav {
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 .nav {
   position: relative;
   z-index: 3;
@@ -145,7 +163,7 @@ const navItems = computed(() => [
 .nav a:hover,
 .nav .router-link-active {
   color: var(--text-main);
-  background: var(--bg-panel);
+  background: var(--bg-panel-strong);
   border-color: var(--line);
 }
 
@@ -173,6 +191,11 @@ const navItems = computed(() => [
     width: 100%;
     justify-content: space-between;
   }
+
+  .glass-subnav {
+    width: 100%;
+    border-radius: 24px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -190,6 +213,17 @@ const navItems = computed(() => [
   .topbar-actions {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .glass-subnav,
+  .nav {
+    width: 100%;
+  }
+
+  .nav a {
+    flex: 1 1 calc(50% - 10px);
+    justify-content: center;
+    text-align: center;
   }
 }
 </style>

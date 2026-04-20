@@ -30,6 +30,8 @@ public interface KnowledgeBaseRepository {
 
     ChatHistoryMessage saveConversationMessage(ChatHistoryMessage message);
 
+    ChatHistoryMessage updateConversationFeedback(String sessionId, Long messageId, Boolean helpful, String note);
+
     ConversationSession findConversationSession(String sessionId);
 
     List<ConversationSession> listConversationSessions(boolean includeDeleted, int limit);

@@ -1,5 +1,6 @@
 package com.hejulian.blog.rag.domain.model;
 
+import com.hejulian.blog.dto.RagDtos;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -10,6 +11,10 @@ public record ChatHistoryMessage(
         String content,
         String mode,
         List<Integer> citations,
-        LocalDateTime createdAt
+        List<RagDtos.Source> sources,
+        LocalDateTime createdAt,
+        Boolean feedbackHelpful,
+        String feedbackNote,
+        LocalDateTime feedbackAt
 ) {
 }

@@ -25,6 +25,13 @@
         LIMIT 1
     </select>
 
+    <select id="selectBySlug" resultMap="TagResultMap">
+        SELECT id, name, slug, created_at, updated_at
+        FROM tags
+        WHERE slug = #{slug}
+        LIMIT 1
+    </select>
+
     <select id="selectByIds" resultMap="TagResultMap">
         SELECT id, name, slug, created_at, updated_at
         FROM tags
@@ -77,4 +84,3 @@
     </delete>
 
 </mapper>
-

@@ -2,6 +2,7 @@ package com.hejulian.blog;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,6 +18,8 @@ import com.hejulian.blog.mapper.CategoryMapper;
 import com.hejulian.blog.mapper.CommentMapper;
 import com.hejulian.blog.mapper.PostMapper;
 import com.hejulian.blog.mapper.TagMapper;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
@@ -25,6 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -132,7 +136,97 @@ class BlogApplicationTests {
                 .andExpect(jsonPath("$.data.records.length()").value(1))
                 .andExpect(jsonPath("$.data.records[0].status").value("PUBLISHED"))
                 .andExpect(jsonPath("$.data.records[0].title").value("Admin Search Post"))
+                .andExpect(jsonPath("$.data.records[0].tags.length()").value(org.hamcrest.Matchers.greaterThan(0)))
                 .andExpect(jsonPath("$.data.page").value(1));
+    }
+
+    @Test
+    void adminPostSaveShouldCreateManualAndHashtagTags() throws Exception {
+        String token = loginAndGetToken();
+
+        MvcResult result = mockMvc.perform(post("/api/admin/posts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Tag Driven Post",
+                                  "slug": "",
+                                  "summary": "Saved with mixed tag sources",
+                                  "coverImage": "",
+                                  "content": "This post talks about #RAG and #知识库 support.",
+                                  "status": "PUBLISHED",
+                                  "featured": false,
+                                  "allowComment": true,
+                                  "tags": ["AI Ops", "#RAG"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.tags.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)))
+                .andReturn();
+
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        long postId = body.path("data").path("id").asLong();
+        List<String> savedTags = tagMapper.selectTagsByPostId(postId).stream().map(Tag::getName).toList();
+
+        Assertions.assertTrue(savedTags.contains("AI Ops"));
+        Assertions.assertTrue(savedTags.contains("RAG"));
+        Assertions.assertTrue(savedTags.contains("知识库"));
+    }
+
+    @Test
+    void deletingTagShouldAlsoRemovePostAssociations() throws Exception {
+        String token = loginAndGetToken();
+
+        MvcResult result = mockMvc.perform(post("/api/admin/posts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Delete Tag Binding",
+                                  "summary": "Tag moderation should detach tag associations",
+                                  "coverImage": "",
+                                  "content": "Article body with #ModerationTag",
+                                  "status": "PUBLISHED",
+                                  "featured": false,
+                                  "allowComment": true,
+                                  "tags": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        long postId = objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("id").asLong();
+        Tag moderationTag = tagMapper.selectTagsByPostId(postId).stream()
+                .filter(tag -> "ModerationTag".equals(tag.getName()))
+                .findFirst()
+                .orElseThrow();
+
+        mockMvc.perform(delete("/api/admin/tags/{id}", moderationTag.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        Assertions.assertTrue(tagMapper.selectTagsByPostId(postId).stream().noneMatch(tag -> moderationTag.getId().equals(tag.getId())));
+        Assertions.assertNull(tagMapper.selectById(moderationTag.getId()));
+    }
+
+    @Test
+    void adminImageUploadShouldReturnPublicUrl() throws Exception {
+        String token = loginAndGetToken();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "cover.png",
+                "image/png",
+                "fake-image".getBytes(StandardCharsets.UTF_8)
+        );
+
+        mockMvc.perform(multipart("/api/admin/uploads/images")
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.url").value(org.hamcrest.Matchers.startsWith("/uploads/images/")));
     }
 
     @Test
@@ -196,6 +290,192 @@ class BlogApplicationTests {
                 .andExpect(jsonPath("$.data.mode").value("retrieval"))
                 .andExpect(jsonPath("$.data.sources.length()").value(org.hamcrest.Matchers.greaterThan(0)))
                 .andExpect(jsonPath("$.data.indexedChunks").value(org.hamcrest.Matchers.greaterThan(0)));
+    }
+
+    @Test
+    void ragFeedbackShouldBeStoredForAssistantMessages() throws Exception {
+        insertPublishedPost(
+                "Feedback Loop Guide",
+                "We keep the answer grounded and collect feedback on assistant responses."
+        );
+
+        MvcResult askResult = mockMvc.perform(post("/api/public/rag/ask")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "How do we collect feedback for RAG answers?",
+                                  "topK": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andReturn();
+
+        JsonNode askBody = objectMapper.readTree(askResult.getResponse().getContentAsString());
+        String sessionId = askBody.path("data").path("sessionId").asText();
+        long assistantMessageId = askBody.path("data").path("history").get(1).path("id").asLong();
+
+        mockMvc.perform(post("/api/public/rag/feedback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "%s",
+                                  "messageId": %d,
+                                  "helpful": true,
+                                  "note": "clear and cited"
+                                }
+                                """.formatted(sessionId, assistantMessageId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(assistantMessageId))
+                .andExpect(jsonPath("$.data.feedbackHelpful").value(true))
+                .andExpect(jsonPath("$.data.feedbackNote").value("clear and cited"));
+
+        mockMvc.perform(get("/api/public/rag/history")
+                        .param("sessionId", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.messages[1].feedbackHelpful").value(true))
+                .andExpect(jsonPath("$.data.messages[1].feedbackNote").value("clear and cited"));
+    }
+
+    @Test
+    void dashboardShouldExposeRagFeedbackSummary() throws Exception {
+        String token = loginAndGetToken();
+        insertPublishedPost(
+                "RAG Admin Metrics",
+                "The dashboard should summarize helpful and needs-work answer feedback."
+        );
+
+        MvcResult askResult = mockMvc.perform(post("/api/public/rag/ask")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "How is feedback summarized in the admin dashboard?",
+                                  "topK": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode askBody = objectMapper.readTree(askResult.getResponse().getContentAsString());
+        String sessionId = askBody.path("data").path("sessionId").asText();
+        long assistantMessageId = askBody.path("data").path("history").get(1).path("id").asLong();
+
+        mockMvc.perform(post("/api/public/rag/feedback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "%s",
+                                  "messageId": %d,
+                                  "helpful": false,
+                                  "note": "needs tighter sourcing"
+                                }
+                                """.formatted(sessionId, assistantMessageId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/dashboard")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ragFeedback.answerCount").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.data.ragFeedback.feedbackCount").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.data.ragFeedback.needsWorkCount").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.data.ragFeedback.recentFeedback.length()").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.data.ragFeedback.recentFeedback[0].note").value("needs tighter sourcing"));
+    }
+
+    @Test
+    void adminRagFeedbackShouldSupportHelpfulAndKeywordFilters() throws Exception {
+        String token = loginAndGetToken();
+        insertPublishedPost(
+                "RAG Feedback Queue",
+                "The admin screen filters helpful and needs-work feedback by note and answer preview."
+        );
+
+        MvcResult askResult = mockMvc.perform(post("/api/public/rag/ask")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "How does the admin screen filter RAG feedback?",
+                                  "topK": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode askBody = objectMapper.readTree(askResult.getResponse().getContentAsString());
+        String sessionId = askBody.path("data").path("sessionId").asText();
+        long assistantMessageId = askBody.path("data").path("history").get(1).path("id").asLong();
+
+        mockMvc.perform(post("/api/public/rag/feedback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "%s",
+                                  "messageId": %d,
+                                  "helpful": false,
+                                  "note": "filter me"
+                                }
+                                """.formatted(sessionId, assistantMessageId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/rag-feedback")
+                        .header("Authorization", "Bearer " + token)
+                        .param("helpful", "false")
+                        .param("keyword", "filter me")
+                        .param("page", "1")
+                        .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.records.length()").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.data.records[0].helpful").value(false))
+                .andExpect(jsonPath("$.data.records[0].note").value("filter me"));
+    }
+
+    @Test
+    void adminRagFeedbackExportShouldSupportDateFilters() throws Exception {
+        String token = loginAndGetToken();
+        insertPublishedPost(
+                "RAG Export Window",
+                "The export endpoint should support date range filters and CSV output."
+        );
+
+        MvcResult askResult = mockMvc.perform(post("/api/public/rag/ask")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "How does CSV export work for RAG feedback?",
+                                  "topK": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode askBody = objectMapper.readTree(askResult.getResponse().getContentAsString());
+        String sessionId = askBody.path("data").path("sessionId").asText();
+        long assistantMessageId = askBody.path("data").path("history").get(1).path("id").asLong();
+
+        mockMvc.perform(post("/api/public/rag/feedback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "%s",
+                                  "messageId": %d,
+                                  "helpful": true,
+                                  "note": "csv export row"
+                                }
+                                """.formatted(sessionId, assistantMessageId)))
+                .andExpect(status().isOk());
+
+        MvcResult exportResult = mockMvc.perform(get("/api/admin/rag-feedback/export")
+                        .header("Authorization", "Bearer " + token)
+                        .param("feedbackDateFrom", LocalDate.now().toString())
+                        .param("feedbackDateTo", LocalDate.now().toString()))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String csv = exportResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        Assertions.assertTrue(csv.contains("feedback_type"));
+        Assertions.assertTrue(csv.contains("csv export row"));
     }
 
     @Test

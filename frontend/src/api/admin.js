@@ -6,6 +6,10 @@ export const fetchAdminPostApi = (id) => http.get(`/admin/posts/${id}`);
 export const saveAdminPostApi = (payload) =>
   payload.id ? http.put(`/admin/posts/${payload.id}`, payload) : http.post('/admin/posts', payload);
 export const deleteAdminPostApi = (id) => http.delete(`/admin/posts/${id}`);
+export const uploadAdminImageApi = (formData) =>
+  http.post('/admin/uploads/images', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
 
 export const fetchCategoriesApi = () => http.get('/admin/categories');
 export const saveCategoryApi = (payload) =>
@@ -19,3 +23,6 @@ export const deleteTagApi = (id) => http.delete(`/admin/tags/${id}`);
 
 export const fetchAdminCommentsApi = () => http.get('/admin/comments');
 export const reviewCommentApi = (id, status) => http.put(`/admin/comments/${id}/status`, { status });
+export const fetchAdminRagFeedbackApi = (params) => http.get('/admin/rag-feedback', { params });
+export const exportAdminRagFeedbackCsvApi = (params) =>
+  http.get('/admin/rag-feedback/export', { params, responseType: 'blob' });

@@ -27,6 +27,10 @@ public class RagSchemaInitializer implements CommandLineRunner {
             ensureColumn(metadata, "rag_chunks", "embedding_json", isH2(productName) ? "CLOB" : "LONGTEXT");
             ensureColumn(metadata, "rag_chunks", "embedding_model", "VARCHAR(64)");
             ensureColumn(metadata, "rag_chunks", "embedding_dimensions", "INT");
+            ensureColumn(metadata, "rag_chat_messages", "feedback_helpful", "BOOLEAN");
+            ensureColumn(metadata, "rag_chat_messages", "feedback_note", "VARCHAR(1000)");
+            ensureColumn(metadata, "rag_chat_messages", "feedback_at", isH2(productName) ? "TIMESTAMP" : "DATETIME");
+            ensureColumn(metadata, "rag_chat_messages", "sources_json", isH2(productName) ? "CLOB" : "LONGTEXT");
             backfillMissingSessions();
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to initialize rag_chunks schema", ex);
@@ -72,9 +76,13 @@ public class RagSchemaInitializer implements CommandLineRunner {
                     content %s NOT NULL,
                     answer_mode VARCHAR(16) NULL,
                     citations_json %s NULL,
+                    sources_json %s NULL,
+                    feedback_helpful BOOLEAN NULL,
+                    feedback_note VARCHAR(1000) NULL,
+                    feedback_at %s NULL,
                     created_at %s NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
-                """.formatted(contentType, contentType, timestampType);
+                """.formatted(contentType, contentType, contentType, timestampType, timestampType);
     }
 
     private String buildCreateChatSessionTableSql(String productName) {

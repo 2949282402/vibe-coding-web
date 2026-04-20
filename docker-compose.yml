@@ -112,6 +112,7 @@ services:
       BLOG_RAG_CHUNK_SIZE: ${BLOG_RAG_CHUNK_SIZE:-520}
       BLOG_RAG_CHUNK_OVERLAP: ${BLOG_RAG_CHUNK_OVERLAP:-120}
       BLOG_RAG_MIN_SCORE: ${BLOG_RAG_MIN_SCORE:-0.2}
+      BLOG_UPLOAD_DIR: /app/uploads
       TZ: Asia/Shanghai
     depends_on:
       mysql:
@@ -122,6 +123,8 @@ services:
         condition: service_started
     ports:
       - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - backend-uploads:/app/uploads
 
   frontend:
     build:
@@ -138,3 +141,4 @@ volumes:
   mysql-data:
   redis-data:
   qdrant-data:
+  backend-uploads:

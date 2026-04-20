@@ -2,13 +2,12 @@
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessageBox, ElMessage } from 'element-plus';
-import { deleteAdminPostApi, fetchAdminPostsApi, fetchCategoriesApi } from '../../api/admin';
+import { deleteAdminPostApi, fetchAdminPostsApi } from '../../api/admin';
 import { usePreferencesStore } from '../../stores/preferences';
 
 const preferences = usePreferencesStore();
 const router = useRouter();
 const loading = ref(true);
-const categories = ref([]);
 const pageData = ref({
   records: [],
   page: 1,
@@ -19,14 +18,8 @@ const pageData = ref({
 });
 const filters = reactive({
   keyword: '',
-  status: '',
-  categoryId: ''
+  status: ''
 });
-
-const loadCategories = async () => {
-  const res = await fetchCategoriesApi();
-  categories.value = res.data;
-};
 
 const loadData = async (page = pageData.value.page || 1) => {
   loading.value = true;
@@ -34,7 +27,6 @@ const loadData = async (page = pageData.value.page || 1) => {
     const res = await fetchAdminPostsApi({
       keyword: filters.keyword || undefined,
       status: filters.status || undefined,
-      categoryId: filters.categoryId || undefined,
       page,
       pageSize: 10
     });
@@ -51,7 +43,6 @@ const search = async () => {
 const resetFilters = async () => {
   filters.keyword = '';
   filters.status = '';
-  filters.categoryId = '';
   await loadData(1);
 };
 
@@ -90,22 +81,25 @@ const statusLabel = (status) => {
 };
 
 onMounted(async () => {
-  await loadCategories();
   await loadData(1);
 });
 </script>
 
 <template>
-  <section class="section-card panel admin-surface" v-loading="loading">
-    <div class="section-heading">
+  <section class="section-card admin-surface admin-panel admin-page-stack" v-loading="loading">
+    <div class="admin-page-head">
       <div>
+        <span class="admin-kicker">Publishing</span>
         <h2>{{ preferences.t('postManage.title') }}</h2>
-        <p class="muted subtext">{{ preferences.t('postManage.hint') }}</p>
+        <p class="muted">{{ preferences.t('postManage.hint') }}</p>
       </div>
-      <el-button type="primary" @click="router.push('/admin/posts/new')">{{ preferences.t('postManage.newPost') }}</el-button>
+      <div class="admin-page-actions">
+        <span class="admin-badge">{{ preferences.t('postManage.totalPageInfo', { total: pageData.total, page: pageData.page, pages: pageData.totalPages || 1 }) }}</span>
+        <el-button type="primary" @click="router.push('/admin/posts/new')">{{ preferences.t('postManage.newPost') }}</el-button>
+      </div>
     </div>
 
-    <div class="toolbar">
+    <div class="toolbar admin-toolbar manage-toolbar">
       <el-input
         v-model="filters.keyword"
         :placeholder="preferences.t('postManage.searchPlaceholder')"
@@ -115,38 +109,43 @@ onMounted(async () => {
         <el-option :label="preferences.t('postManage.published')" value="PUBLISHED" />
         <el-option :label="preferences.t('postManage.draft')" value="DRAFT" />
       </el-select>
-      <el-select v-model="filters.categoryId" :placeholder="preferences.t('postManage.allCategories')" clearable>
-        <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
-      </el-select>
       <el-button type="primary" @click="search">{{ preferences.t('postManage.apply') }}</el-button>
       <el-button @click="resetFilters">{{ preferences.t('postManage.reset') }}</el-button>
     </div>
 
-    <div class="table-meta muted">
-      {{ preferences.t('postManage.totalPageInfo', { total: pageData.total, page: pageData.page, pages: pageData.totalPages || 1 }) }}
+    <div class="admin-meta-row table-meta muted">
+      <span>{{ preferences.t('postManage.totalPageInfo', { total: pageData.total, page: pageData.page, pages: pageData.totalPages || 1 }) }}</span>
     </div>
 
-    <el-table :data="pageData.records">
-      <el-table-column prop="title" :label="preferences.t('postManage.colTitle')" min-width="220" />
-      <el-table-column prop="categoryName" :label="preferences.t('postManage.colCategory')" width="140" />
-      <el-table-column :label="preferences.t('postManage.colStatus')" width="120">
-        <template #default="{ row }">
-          {{ statusLabel(row.status) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="viewCount" :label="preferences.t('postManage.colViews')" width="100" />
-      <el-table-column :label="preferences.t('postManage.colUpdatedAt')" width="180">
-        <template #default="{ row }">
-          {{ preferences.formatDateTime(row.updatedAt) }}
-        </template>
-      </el-table-column>
-      <el-table-column :label="preferences.t('postManage.colActions')" width="180" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="router.push(`/admin/posts/${row.id}/edit`)">{{ preferences.t('postManage.edit') }}</el-button>
-          <el-button link type="danger" @click="removePost(row.id)">{{ preferences.t('postManage.delete') }}</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="admin-table-wrap">
+      <el-table :data="pageData.records">
+        <el-table-column prop="title" :label="preferences.t('postManage.colTitle')" min-width="220" />
+        <el-table-column :label="preferences.t('postManage.colTags')" min-width="220">
+          <template #default="{ row }">
+            <div class="tag-cell">
+              <span v-for="tag in row.tags || []" :key="`${row.id}-${tag}`" class="chip"># {{ tag }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="preferences.t('postManage.colStatus')" width="120">
+          <template #default="{ row }">
+            <span class="admin-status-pill">{{ statusLabel(row.status) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="viewCount" :label="preferences.t('postManage.colViews')" width="100" />
+        <el-table-column :label="preferences.t('postManage.colUpdatedAt')" width="180">
+          <template #default="{ row }">
+            {{ preferences.formatDateTime(row.updatedAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="preferences.t('postManage.colActions')" width="180" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="router.push(`/admin/posts/${row.id}/edit`)">{{ preferences.t('postManage.edit') }}</el-button>
+            <el-button link type="danger" @click="removePost(row.id)">{{ preferences.t('postManage.delete') }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
     <div v-if="pageData.total > 0" class="pager">
       <el-button :disabled="pageData.page <= 1" @click="prevPage">{{ preferences.t('postManage.previous') }}</el-button>
@@ -156,8 +155,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.panel {
-  padding: 24px;
+.manage-toolbar {
+  grid-template-columns: minmax(0, 1.8fr) 180px auto auto;
 }
 
 .admin-surface :deep(.el-input__wrapper),
@@ -186,38 +185,26 @@ onMounted(async () => {
   background: var(--table-surface) !important;
 }
 
-.admin-surface :deep(.el-table) {
-  border-radius: 18px;
-  overflow: hidden;
-}
-
-.subtext {
-  margin: 8px 0 0;
-}
-
-.toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) 160px 180px auto auto;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
 .table-meta {
-  margin-bottom: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: 0.8rem;
 }
 
 .pager {
-  margin-top: 18px;
   display: flex;
   justify-content: flex-end;
   gap: 12px;
 }
 
+.tag-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 960px) {
-  .toolbar {
+  .manage-toolbar {
     grid-template-columns: 1fr;
   }
 }

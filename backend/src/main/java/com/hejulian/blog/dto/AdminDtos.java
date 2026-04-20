@@ -1,8 +1,6 @@
 package com.hejulian.blog.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -17,8 +15,44 @@ public final class AdminDtos {
             long tagCount,
             long pendingCommentCount,
             long approvedCommentCount,
+            RagFeedbackSummary ragFeedback,
             List<RecentPostResponse> recentPosts,
             List<RecentCommentResponse> recentComments
+    ) {
+    }
+
+    public record RagFeedbackSummary(
+            long answerCount,
+            long feedbackCount,
+            long helpfulCount,
+            long needsWorkCount,
+            double coverageRate,
+            double helpfulRate,
+            List<RecentRagFeedbackResponse> recentFeedback
+    ) {
+    }
+
+    public record RecentRagFeedbackResponse(
+            Long id,
+            boolean helpful,
+            String note,
+            String answerPreview,
+            String mode,
+            String sessionId,
+            LocalDateTime feedbackAt
+    ) {
+    }
+
+    public record RagFeedbackListResponse(
+            Long id,
+            boolean helpful,
+            String note,
+            String answerPreview,
+            String answerContent,
+            String mode,
+            String sessionId,
+            LocalDateTime createdAt,
+            LocalDateTime feedbackAt
     ) {
     }
 
@@ -42,6 +76,7 @@ public final class AdminDtos {
             String title,
             String slug,
             String categoryName,
+            List<String> tags,
             String status,
             long viewCount,
             LocalDateTime updatedAt
@@ -58,8 +93,8 @@ public final class AdminDtos {
             String status,
             boolean featured,
             boolean allowComment,
-            Long categoryId,
-            List<Long> tagIds
+            String categoryName,
+            List<String> tags
     ) {
     }
 
@@ -73,8 +108,13 @@ public final class AdminDtos {
             @NotBlank(message = "Status must not be blank") String status,
             boolean featured,
             boolean allowComment,
-            @NotNull(message = "Category is required") Long categoryId,
-            @NotEmpty(message = "At least one tag is required") List<Long> tagIds
+            List<String> tags
+    ) {
+    }
+
+    public record ImageUploadResponse(
+            String url,
+            String filename
     ) {
     }
 

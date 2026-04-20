@@ -60,6 +60,11 @@ public class RagController {
         return ApiResponse.success(ragApplicationService.restoreSession(sessionId));
     }
 
+    @PostMapping("/feedback")
+    public ApiResponse<RagDtos.ChatMessage> submitFeedback(@Valid @RequestBody RagDtos.FeedbackRequest request) {
+        return ApiResponse.success(ragApplicationService.submitFeedback(request));
+    }
+
     @PostMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter askStream(@Valid @RequestBody RagDtos.AskRequest request) {
         return ragApplicationService.streamQuestion(request);

@@ -20,6 +20,7 @@ public class RagProperties {
     private final Qdrant qdrant = new Qdrant();
     private final PythonBridge pythonBridge = new PythonBridge();
     private final Generator generator = new Generator();
+    private final WebSearch webSearch = new WebSearch();
 
     @Getter
     @Setter
@@ -75,4 +76,21 @@ public class RagProperties {
         private String model = "qwen-max";
         private int timeoutSeconds = 180;
     }
+
+    @Getter
+    @Setter
+    public static class WebSearch {
+
+        private boolean enabled = true;
+        private String baseUrl = "https://dashscope.aliyuncs.com";
+        private String apiKey;
+        private String model = "qwen-plus";
+        private int timeoutSeconds = 120;
+        private boolean enableSource = true;
+        private boolean enableCitation;
+        private String citationFormat = "[ref_<number>]";
+        private boolean forcedSearch = true;
+        private String searchStrategy = "turbo";
+    }
+
 }

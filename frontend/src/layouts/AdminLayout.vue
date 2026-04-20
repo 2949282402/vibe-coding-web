@@ -13,7 +13,8 @@ const menus = computed(() => [
   { label: preferences.t('admin.menuOverview'), to: '/admin/dashboard' },
   { label: preferences.t('admin.menuPosts'), to: '/admin/posts' },
   { label: preferences.t('admin.menuTaxonomy'), to: '/admin/taxonomies' },
-  { label: preferences.t('admin.menuComments'), to: '/admin/comments' }
+  { label: preferences.t('admin.menuComments'), to: '/admin/comments' },
+  { label: preferences.t('admin.menuRagFeedback'), to: '/admin/rag-feedback' }
 ]);
 
 const logout = () => {
@@ -26,20 +27,29 @@ const logout = () => {
   <div class="admin-grid">
     <aside class="sidebar">
       <div class="brand-block">
-        <h1 class="console-title">{{ preferences.t('admin.consoleTitle') }}</h1>
         <div class="sidebar-top">
-          <AppControls />
+          <div class="sidebar-heading">
+            <span class="console-kicker">Console</span>
+            <h1 class="console-title">{{ preferences.t('admin.consoleTitle') }}</h1>
+          </div>
+          <div class="sidebar-controls">
+            <AppControls />
+          </div>
         </div>
-        <h2>{{ preferences.t('admin.blogAdmin') }}</h2>
-        <p class="muted">
-          {{ preferences.t('admin.operator') }}:
-          {{ authStore.user?.displayName || authStore.user?.username }}
-        </p>
+
+        <div class="brand-card">
+          <span class="admin-eyebrow">Workspace</span>
+          <h2>{{ preferences.t('admin.blogAdmin') }}</h2>
+          <p class="muted">
+            {{ preferences.t('admin.operator') }}:
+            {{ authStore.user?.displayName || authStore.user?.username }}
+          </p>
+        </div>
       </div>
 
       <nav class="menu">
         <router-link v-for="menu in menus" :key="menu.to" :to="menu.to">
-          {{ menu.label }}
+          <span>{{ menu.label }}</span>
         </router-link>
       </nav>
 
@@ -57,8 +67,13 @@ const logout = () => {
 
 <style scoped>
 .sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
   min-height: 100vh;
-  padding: 28px 24px;
+  padding: 26px 22px;
   color: var(--text-main);
   border-right: 1px solid var(--line);
   background: var(--admin-sidebar-bg);
@@ -66,23 +81,58 @@ const logout = () => {
 
 .sidebar-top {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
 }
 
-.brand-block h2 {
-  margin: 14px 0 10px;
-  font-size: 2rem;
-  letter-spacing: 0.08em;
+.sidebar-heading {
+  min-width: 0;
+}
+
+.sidebar-controls {
+  align-self: flex-start;
+}
+
+.brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brand-card {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--admin-soft-bg);
+}
+
+.brand-card h2 {
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: -0.04em;
+  text-transform: none;
+}
+
+.brand-card p {
+  margin: 10px 0 0;
+  line-height: 1.7;
+}
+
+.console-kicker {
+  display: inline-flex;
+  margin-bottom: 10px;
+  color: var(--text-secondary);
   text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.76rem;
 }
 
 .console-title {
-  margin: 0 0 16px;
-  font-size: 2.4rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 2.6rem);
+  letter-spacing: -0.05em;
+  text-transform: none;
   color: var(--text-main);
 }
 
@@ -91,17 +141,25 @@ const logout = () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 26px;
+}
+
+.menu {
+  flex: 1;
 }
 
 .menu a,
 .sidebar-footer a,
 .sidebar-footer button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
   padding: 13px 15px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px;
   color: var(--text-secondary);
-  background: var(--bg-panel);
+  background: var(--admin-soft-bg);
   transition: 0.2s ease;
 }
 
@@ -110,8 +168,9 @@ const logout = () => {
 .sidebar-footer button:hover,
 .menu .router-link-active {
   color: var(--text-main);
-  background: var(--bg-panel-hover);
+  background: var(--admin-soft-hover);
   border-color: var(--line-strong);
+  transform: translateY(-1px);
 }
 
 button {
@@ -121,6 +180,13 @@ button {
 }
 
 @media (max-width: 960px) {
+  .sidebar {
+    position: relative;
+    min-height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
   .sidebar-top {
     flex-direction: column;
   }

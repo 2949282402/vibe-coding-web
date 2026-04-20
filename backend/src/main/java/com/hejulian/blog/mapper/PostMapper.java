@@ -64,5 +64,7 @@ public interface PostMapper {
 
     int deletePostTags(@Param("postId") Long postId);
 
+    int deletePostTagsByTagId(@Param("tagId") Long tagId);
+
     int insertPostTags(@Param("postId") Long postId, @Param("tagIds") List<Long> tagIds);
 }

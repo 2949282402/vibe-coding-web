@@ -16,7 +16,8 @@ public final class RagDtos {
             @Min(value = 1, message = "topK must be at least 1")
             @Max(value = 8, message = "topK must not exceed 8")
             Integer topK,
-            String sessionId
+            String sessionId,
+            String searchMode
     ) {
     }
 
@@ -31,7 +32,16 @@ public final class RagDtos {
             List<String> followUpQuestions,
             List<Source> sources,
             List<ChatMessage> history,
-            boolean strictCitation
+            boolean strictCitation,
+            String searchMode
+    ) {
+    }
+
+    public record FeedbackRequest(
+            @jakarta.validation.constraints.NotNull(message = "messageId must not be null") Long messageId,
+            @jakarta.validation.constraints.NotNull(message = "helpful must not be null") Boolean helpful,
+            String note,
+            @NotBlank(message = "sessionId must not be blank") String sessionId
     ) {
     }
 
@@ -41,7 +51,10 @@ public final class RagDtos {
             String slug,
             String excerpt,
             double score,
-            int citationIndex
+            int citationIndex,
+            String sourceType,
+            String url,
+            String domain
     ) {
     }
 
@@ -51,7 +64,11 @@ public final class RagDtos {
             String content,
             String mode,
             List<Integer> citations,
-            LocalDateTime createdAt
+            List<Source> sources,
+            LocalDateTime createdAt,
+            Boolean feedbackHelpful,
+            String feedbackNote,
+            LocalDateTime feedbackAt
     ) {
     }
 

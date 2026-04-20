@@ -59,6 +59,8 @@ blog:
     name: HeJulian Blog
     hero-title: Build Once, Write for Years
     hero-subtitle: A personal blog system built with Vue 3 and Spring Boot for writing, taxonomy management, comment moderation, and admin operations.
+  upload:
+    dir: ${BLOG_UPLOAD_DIR:uploads}
   rag:
     chunk-size: ${BLOG_RAG_CHUNK_SIZE:520}
     chunk-overlap: ${BLOG_RAG_CHUNK_OVERLAP:120}
@@ -96,6 +98,17 @@ blog:
       api-key: ${BLOG_RAG_API_KEY:}
       model: ${BLOG_RAG_MODEL:qwen-max}
       timeout-seconds: ${BLOG_RAG_GENERATOR_TIMEOUT_SECONDS:180}
+    web-search:
+      enabled: ${BLOG_RAG_WEB_SEARCH_ENABLED:true}
+      base-url: ${BLOG_RAG_WEB_SEARCH_BASE_URL:https://dashscope.aliyuncs.com}
+      api-key: ${BLOG_RAG_WEB_SEARCH_API_KEY:}
+      model: ${BLOG_RAG_WEB_SEARCH_MODEL:qwen-plus}
+      timeout-seconds: ${BLOG_RAG_WEB_SEARCH_TIMEOUT_SECONDS:120}
+      enable-source: ${BLOG_RAG_WEB_SEARCH_ENABLE_SOURCE:true}
+      enable-citation: ${BLOG_RAG_WEB_SEARCH_ENABLE_CITATION:false}
+      citation-format: "${BLOG_RAG_WEB_SEARCH_CITATION_FORMAT:[ref_<number>]}"
+      forced-search: ${BLOG_RAG_WEB_SEARCH_FORCED_SEARCH:true}
+      search-strategy: ${BLOG_RAG_WEB_SEARCH_STRATEGY:turbo}
   jwt:
     secret: c3ByaW5nLWJvb3QtanNwLWFkbWluLWp3dC1zZWNyZXQta2V5LWZvci1oZWp1bGlhbi1ibG9n
     expiration-millis: 604800000

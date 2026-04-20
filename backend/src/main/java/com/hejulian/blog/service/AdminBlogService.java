@@ -8,16 +8,26 @@ import com.hejulian.blog.dto.BlogDtos;
 import com.hejulian.blog.entity.CommentStatus;
 import com.hejulian.blog.entity.Post;
 import com.hejulian.blog.entity.PostStatus;
+import com.hejulian.blog.entity.RagChatMessage;
 import com.hejulian.blog.entity.Tag;
 import com.hejulian.blog.exception.BusinessException;
 import com.hejulian.blog.mapper.CategoryMapper;
 import com.hejulian.blog.mapper.CommentMapper;
 import com.hejulian.blog.mapper.PostMapper;
+import com.hejulian.blog.mapper.RagChatMessageMapper;
 import com.hejulian.blog.mapper.TagMapper;
 import com.hejulian.blog.rag.application.RagIndexingApplicationService;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -27,21 +37,27 @@ import org.springframework.util.StringUtils;
 @Service
 public class AdminBlogService {
 
+    private static final Pattern CONTENT_TAG_PATTERN = Pattern.compile("(?<![\\p{L}\\p{N}_-])#([\\p{L}\\p{N}][\\p{L}\\p{N}_-]{0,31})");
+    private static final Pattern MANUAL_TAG_SPLIT_PATTERN = Pattern.compile("[,;\\n]+");
+
     private final PostMapper postMapper;
     private final CategoryMapper categoryMapper;
     private final TagMapper tagMapper;
     private final CommentMapper commentMapper;
+    private final RagChatMessageMapper ragChatMessageMapper;
     private final RagIndexingApplicationService ragIndexingApplicationService;
 
     public AdminBlogService(PostMapper postMapper,
                             CategoryMapper categoryMapper,
                             TagMapper tagMapper,
                             CommentMapper commentMapper,
+                            RagChatMessageMapper ragChatMessageMapper,
                             RagIndexingApplicationService ragIndexingApplicationService) {
         this.postMapper = postMapper;
         this.categoryMapper = categoryMapper;
         this.tagMapper = tagMapper;
         this.commentMapper = commentMapper;
+        this.ragChatMessageMapper = ragChatMessageMapper;
         this.ragIndexingApplicationService = ragIndexingApplicationService;
     }
 
@@ -53,6 +69,7 @@ public class AdminBlogService {
                 tagMapper.countAll(),
                 commentMapper.countByStatus(CommentStatus.PENDING.name()),
                 commentMapper.countByStatus(CommentStatus.APPROVED.name()),
+                buildRagFeedbackSummary(),
                 postMapper.selectRecentUpdated(6)
                         .stream()
                         .map(post -> new AdminDtos.RecentPostResponse(post.getId(), post.getTitle(), post.getUpdatedAt()))
@@ -65,6 +82,25 @@ public class AdminBlogService {
                                 comment.getPostTitle(),
                                 comment.getCreatedAt()
                         ))
+                        .toList()
+        );
+    }
+
+    private AdminDtos.RagFeedbackSummary buildRagFeedbackSummary() {
+        long answerCount = ragChatMessageMapper.countAssistantMessages();
+        long feedbackCount = ragChatMessageMapper.countAssistantMessagesWithFeedback();
+        long helpfulCount = ragChatMessageMapper.countAssistantMessagesByFeedback(true);
+        long needsWorkCount = ragChatMessageMapper.countAssistantMessagesByFeedback(false);
+
+        return new AdminDtos.RagFeedbackSummary(
+                answerCount,
+                feedbackCount,
+                helpfulCount,
+                needsWorkCount,
+                calculateRate(feedbackCount, answerCount),
+                calculateRate(helpfulCount, feedbackCount),
+                ragChatMessageMapper.selectRecentFeedback(6).stream()
+                        .map(this::toRecentRagFeedbackResponse)
                         .toList()
         );
     }
@@ -89,6 +125,7 @@ public class AdminBlogService {
                         post.getTitle(),
                         post.getSlug(),
                         post.getCategoryName(),
+                        getPostTagNames(post.getId()),
                         post.getStatus().name(),
                         post.getViewCount(),
                         post.getUpdatedAt()
@@ -105,10 +142,7 @@ public class AdminBlogService {
             throw new BusinessException("Post not found");
         }
 
-        List<Long> tagIds = tagMapper.selectTagsByPostId(post.getId())
-                .stream()
-                .map(Tag::getId)
-                .toList();
+        List<String> tagNames = getPostTagNames(post.getId());
 
         return new AdminDtos.AdminPostDetailResponse(
                 post.getId(),
@@ -120,23 +154,14 @@ public class AdminBlogService {
                 post.getStatus().name(),
                 post.isFeatured(),
                 post.isAllowComment(),
-                post.getCategoryId(),
-                tagIds
+                post.getCategoryName(),
+                tagNames
         );
     }
 
     @Transactional
     @CacheEvict(value = {CacheNames.SITE_HOME, CacheNames.PUBLIC_POST_LIST}, allEntries = true)
     public AdminDtos.AdminPostDetailResponse savePost(AdminDtos.PostSaveRequest request) {
-        if (categoryMapper.countById(request.categoryId()) == 0) {
-            throw new BusinessException("Category not found");
-        }
-
-        List<Tag> tags = tagMapper.selectByIds(request.tagIds());
-        if (tags.size() != request.tagIds().size()) {
-            throw new BusinessException("One or more tags are invalid");
-        }
-
         Post post = request.id() == null ? new Post() : postMapper.selectById(request.id());
         if (request.id() != null && post == null) {
             throw new BusinessException("Post not found");
@@ -144,6 +169,8 @@ public class AdminBlogService {
 
         PostStatus nextStatus = parsePostStatus(request.status());
         boolean firstPublish = nextStatus == PostStatus.PUBLISHED && post.getPublishedAt() == null;
+        Long fallbackCategoryId = resolvePostCategoryId();
+        List<Tag> tags = resolveRequestedTags(request.tags(), request.content());
 
         post.setTitle(request.title().trim());
         post.setSlug(generatePostSlug(request.slug(), request.title(), post.getId()));
@@ -153,7 +180,7 @@ public class AdminBlogService {
         post.setStatus(nextStatus);
         post.setFeatured(request.featured());
         post.setAllowComment(request.allowComment());
-        post.setCategoryId(request.categoryId());
+        post.setCategoryId(fallbackCategoryId);
         if (firstPublish) {
             post.setPublishedAt(LocalDateTime.now());
         }
@@ -164,7 +191,9 @@ public class AdminBlogService {
             postMapper.update(post);
             postMapper.deletePostTags(post.getId());
         }
-        postMapper.insertPostTags(post.getId(), request.tagIds());
+        if (!tags.isEmpty()) {
+            postMapper.insertPostTags(post.getId(), tags.stream().map(Tag::getId).toList());
+        }
         ragIndexingApplicationService.syncPost(post);
         return getPost(post.getId());
     }
@@ -290,9 +319,7 @@ public class AdminBlogService {
         if (tagMapper.countById(id) == 0) {
             throw new BusinessException("Tag not found");
         }
-        if (postMapper.countByTagId(id) > 0) {
-            throw new BusinessException("Tag still has associated posts");
-        }
+        postMapper.deletePostTagsByTagId(id);
         tagMapper.deleteById(id);
     }
 
@@ -312,6 +339,66 @@ public class AdminBlogService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<AdminDtos.RagFeedbackListResponse> listRagFeedback(
+            String keyword,
+            Boolean helpful,
+            LocalDate feedbackDateFrom,
+            LocalDate feedbackDateTo,
+            int page,
+            int pageSize
+    ) {
+        int normalizedPage = normalizePage(page);
+        int normalizedPageSize = normalizePageSize(pageSize);
+        String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        LocalDateTime feedbackFrom = normalizeFeedbackDateFrom(feedbackDateFrom);
+        LocalDateTime feedbackTo = normalizeFeedbackDateTo(feedbackDateTo);
+        long total = ragChatMessageMapper.countFilteredFeedback(normalizedKeyword, helpful, feedbackFrom, feedbackTo);
+
+        List<AdminDtos.RagFeedbackListResponse> records = ragChatMessageMapper
+                .selectFilteredFeedback(normalizedKeyword, helpful, feedbackFrom, feedbackTo, normalizedPage * normalizedPageSize, normalizedPageSize)
+                .stream()
+                .map(this::toRagFeedbackListResponse)
+                .toList();
+
+        return buildPageResponse(records, normalizedPage, normalizedPageSize, total);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportRagFeedbackCsv(
+            String keyword,
+            Boolean helpful,
+            LocalDate feedbackDateFrom,
+            LocalDate feedbackDateTo
+    ) {
+        String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        LocalDateTime feedbackFrom = normalizeFeedbackDateFrom(feedbackDateFrom);
+        LocalDateTime feedbackTo = normalizeFeedbackDateTo(feedbackDateTo);
+
+        List<RagChatMessage> records = ragChatMessageMapper.selectAllFilteredFeedback(
+                normalizedKeyword,
+                helpful,
+                feedbackFrom,
+                feedbackTo
+        );
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        output.writeBytes(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+        output.writeBytes("feedback_type,note,answer_preview,mode,session_id,answer_at,feedback_at\n".getBytes(StandardCharsets.UTF_8));
+        for (RagChatMessage record : records) {
+            output.writeBytes((
+                    csvCell(Boolean.TRUE.equals(record.getFeedbackHelpful()) ? "helpful" : "needs_work") + "," +
+                    csvCell(record.getFeedbackNote()) + "," +
+                    csvCell(buildAnswerPreview(record.getContent())) + "," +
+                    csvCell(record.getAnswerMode()) + "," +
+                    csvCell(record.getSessionId()) + "," +
+                    csvCell(formatCsvDateTime(record.getCreatedAt())) + "," +
+                    csvCell(formatCsvDateTime(record.getFeedbackAt())) + "\n"
+            ).getBytes(StandardCharsets.UTF_8));
+        }
+        return output.toByteArray();
+    }
+
     @Transactional
     @CacheEvict(value = CacheNames.SITE_HOME, allEntries = true)
     public void reviewComment(Long id, AdminDtos.CommentReviewRequest request) {
@@ -320,6 +407,70 @@ public class AdminBlogService {
             throw new BusinessException("Comment not found");
         }
         commentMapper.updateStatus(id, parseCommentStatus(request.status()).name());
+    }
+
+    private List<String> getPostTagNames(Long postId) {
+        return tagMapper.selectTagsByPostId(postId).stream().map(Tag::getName).toList();
+    }
+
+    private Long resolvePostCategoryId() {
+        return categoryMapper.selectAllOrderByName()
+                .stream()
+                .findFirst()
+                .map(com.hejulian.blog.entity.Category::getId)
+                .orElseThrow(() -> new BusinessException("At least one category is required"));
+    }
+
+    private List<Tag> resolveRequestedTags(List<String> requestedTags, String content) {
+        Map<String, String> normalizedTags = new LinkedHashMap<>();
+
+        if (requestedTags != null) {
+            requestedTags.stream()
+                    .filter(StringUtils::hasText)
+                    .flatMap(value -> MANUAL_TAG_SPLIT_PATTERN.splitAsStream(value))
+                    .map(this::normalizeTagName)
+                    .filter(StringUtils::hasText)
+                    .forEach(tagName -> normalizedTags.putIfAbsent(SlugUtils.toSlug(tagName), tagName));
+        }
+
+        Matcher matcher = CONTENT_TAG_PATTERN.matcher(StringUtils.hasText(content) ? content : "");
+        while (matcher.find()) {
+            String tagName = normalizeTagName(matcher.group(1));
+            if (StringUtils.hasText(tagName)) {
+                normalizedTags.putIfAbsent(SlugUtils.toSlug(tagName), tagName);
+            }
+        }
+
+        List<Tag> tags = new ArrayList<>();
+        for (Map.Entry<String, String> entry : normalizedTags.entrySet()) {
+            Tag existing = tagMapper.selectBySlug(entry.getKey());
+            if (existing != null) {
+                tags.add(existing);
+                continue;
+            }
+
+            Tag tag = new Tag();
+            tag.setName(entry.getValue());
+            tag.setSlug(generateSlug(entry.getKey(), entry.getValue(), slug -> tagMapper.countBySlug(slug) > 0));
+            tagMapper.insert(tag);
+            tags.add(tag);
+        }
+        return tags;
+    }
+
+    private String normalizeTagName(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+
+        String normalized = value.trim()
+                .replace('\u00A0', ' ')
+                .replaceAll("^#+", "")
+                .replaceAll("[`'\"“”‘’]+", "")
+                .replaceAll("\\s{2,}", " ")
+                .replaceAll("^[\\p{Punct}\\s]+|[\\p{Punct}\\s]+$", "");
+
+        return normalized.isBlank() ? null : normalized;
     }
 
     private String generatePostSlug(String requestedSlug, String title, Long id) {
@@ -369,6 +520,65 @@ public class AdminBlogService {
 
     private int normalizePageSize(int pageSize) {
         return Math.min(Math.max(pageSize, 1), 50);
+    }
+
+    private LocalDateTime normalizeFeedbackDateFrom(LocalDate value) {
+        return value == null ? null : value.atStartOfDay();
+    }
+
+    private LocalDateTime normalizeFeedbackDateTo(LocalDate value) {
+        return value == null ? null : value.plusDays(1).atStartOfDay();
+    }
+
+    private AdminDtos.RecentRagFeedbackResponse toRecentRagFeedbackResponse(RagChatMessage message) {
+        return new AdminDtos.RecentRagFeedbackResponse(
+                message.getId(),
+                Boolean.TRUE.equals(message.getFeedbackHelpful()),
+                message.getFeedbackNote(),
+                buildAnswerPreview(message.getContent()),
+                message.getAnswerMode(),
+                message.getSessionId(),
+                message.getFeedbackAt()
+        );
+    }
+
+    private AdminDtos.RagFeedbackListResponse toRagFeedbackListResponse(RagChatMessage message) {
+        return new AdminDtos.RagFeedbackListResponse(
+                message.getId(),
+                Boolean.TRUE.equals(message.getFeedbackHelpful()),
+                message.getFeedbackNote(),
+                buildAnswerPreview(message.getContent()),
+                message.getContent(),
+                message.getAnswerMode(),
+                message.getSessionId(),
+                message.getCreatedAt(),
+                message.getFeedbackAt()
+        );
+    }
+
+    private String buildAnswerPreview(String content) {
+        if (!StringUtils.hasText(content)) {
+            return "";
+        }
+
+        String normalized = content.trim().replaceAll("\\s+", " ");
+        return normalized.length() > 160 ? normalized.substring(0, 160).trim() + "..." : normalized;
+    }
+
+    private double calculateRate(long value, long total) {
+        if (total <= 0) {
+            return 0D;
+        }
+        return Math.round((value * 10000D) / total) / 100D;
+    }
+
+    private String formatCsvDateTime(LocalDateTime value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private String csvCell(String value) {
+        String normalized = value == null ? "" : value.replace("\"", "\"\"");
+        return "\"" + normalized + "\"";
     }
 
     private <T> PageResponse<T> buildPageResponse(List<T> records, int normalizedPage, int pageSize, long total) {

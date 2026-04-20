@@ -34,7 +34,8 @@ const routes = [
       { path: 'posts/new', name: 'admin-post-create', component: () => import('../views/admin/PostEditorView.vue') },
       { path: 'posts/:id/edit', name: 'admin-post-edit', component: () => import('../views/admin/PostEditorView.vue') },
       { path: 'taxonomies', name: 'admin-taxonomies', component: () => import('../views/admin/TaxonomyManageView.vue') },
-      { path: 'comments', name: 'admin-comments', component: () => import('../views/admin/CommentManageView.vue') }
+      { path: 'comments', name: 'admin-comments', component: () => import('../views/admin/CommentManageView.vue') },
+      { path: 'rag-feedback', name: 'admin-rag-feedback', component: () => import('../views/admin/RagFeedbackManageView.vue') }
     ]
   }
 ];

@@ -10,7 +10,7 @@ const ragCopy = computed(() => {
   if (preferences.locale === 'zh-CN') {
     return {
       title: '知识问答',
-      description: '基于已发布博客内容做检索增强问答，适合快速定位方案、设计思路和部署细节。',
+      description: '基于已发布文章做检索增强问答，适合快速定位方案、设计思路和交付细节。',
       cta: '进入 RAG'
     };
   }
@@ -76,7 +76,7 @@ onMounted(loadData);
 
     <section class="split-grid content-section">
       <div class="stack">
-        <div class="section-heading">
+        <div class="section-heading refined-heading">
           <h2>{{ preferences.t('home.featuredPosts') }}</h2>
           <router-link to="/archives" class="muted all-link">{{ preferences.t('home.browseAll') }}</router-link>
         </div>
@@ -85,7 +85,7 @@ onMounted(loadData);
           <PostCard v-for="post in pageData.featuredPosts" :key="post.id" :post="post" />
         </div>
 
-        <div class="section-heading">
+        <div class="section-heading refined-heading">
           <h2>{{ preferences.t('home.latestReleases') }}</h2>
         </div>
 
@@ -96,7 +96,7 @@ onMounted(loadData);
 
       <aside class="side-stack">
         <section class="section-card sidebar-card rag-card">
-          <div class="section-heading">
+          <div class="section-heading refined-heading">
             <h2>{{ ragCopy.title }}</h2>
           </div>
           <p class="muted rag-copy">{{ ragCopy.description }}</p>
@@ -104,7 +104,7 @@ onMounted(loadData);
         </section>
 
         <section class="section-card sidebar-card">
-          <div class="section-heading">
+          <div class="section-heading refined-heading">
             <h2>{{ preferences.t('home.categories') }}</h2>
           </div>
           <div class="chip-list">
@@ -120,7 +120,7 @@ onMounted(loadData);
         </section>
 
         <section class="section-card sidebar-card">
-          <div class="section-heading">
+          <div class="section-heading refined-heading">
             <h2>{{ preferences.t('home.signalTags') }}</h2>
           </div>
           <div class="chip-list">
@@ -141,7 +141,7 @@ onMounted(loadData);
 
 <style scoped>
 .hero-panel {
-  padding: 38px;
+  padding: 40px;
   display: grid;
   grid-template-columns: 1.3fr 0.82fr;
   gap: 24px;
@@ -169,7 +169,7 @@ onMounted(loadData);
 
 .hero-stats div {
   padding: 22px;
-  border-radius: var(--radius-lg);
+  border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -197,6 +197,10 @@ onMounted(loadData);
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.refined-heading h2 {
+  letter-spacing: -0.03em;
 }
 
 .sidebar-card {

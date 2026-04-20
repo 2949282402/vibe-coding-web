@@ -109,12 +109,16 @@ onMounted(async () => {
 
 <template>
   <section class="section-card archive-panel" v-loading="loading">
-    <div class="section-heading">
+    <div class="archive-hero">
       <div>
+        <span class="archive-kicker muted">Browse</span>
         <h2>{{ preferences.t('archive.title') }}</h2>
         <p class="muted summary-text">{{ preferences.t('archive.summary') }}</p>
       </div>
-      <span class="muted">{{ preferences.t('archive.postsIndexed', { count: pageData.total }) }}</span>
+      <div class="archive-overview glass-panel">
+        <span class="muted">{{ preferences.t('archive.postsIndexed', { count: pageData.total }) }}</span>
+        <strong>{{ pageData.total }}</strong>
+      </div>
     </div>
 
     <div class="toolbar">
@@ -134,7 +138,10 @@ onMounted(async () => {
     </div>
 
     <div v-for="(items, period) in groupedPosts" v-if="pageData.records.length" :key="period" class="archive-group">
-      <h3>{{ period }}</h3>
+      <div class="archive-group-head">
+        <h3>{{ period }}</h3>
+        <span class="muted">{{ items.length }}</span>
+      </div>
       <router-link
         v-for="item in items"
         :key="item.id"
@@ -171,8 +178,46 @@ onMounted(async () => {
   padding: 30px;
 }
 
+.archive-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.archive-kicker {
+  display: inline-block;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.76rem;
+}
+
+.archive-hero h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  letter-spacing: -0.04em;
+}
+
+.archive-overview {
+  min-width: 160px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.archive-overview strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+
 .summary-text {
-  margin: 8px 0 0;
+  max-width: 720px;
+  margin: 10px 0 0;
+  line-height: 1.8;
 }
 
 .toolbar {
@@ -180,19 +225,31 @@ onMounted(async () => {
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 12px;
   margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .filter-summary {
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .archive-group + .archive-group {
-  margin-top: 28px;
+  margin-top: 30px;
+}
+
+.archive-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .archive-group h3 {
-  margin: 0 0 14px;
-  font-size: 1rem;
+  margin: 0;
+  font-size: 0.98rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -204,7 +261,7 @@ onMounted(async () => {
   gap: 18px;
   padding: 18px 20px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.025);
   transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
@@ -216,7 +273,7 @@ onMounted(async () => {
 .archive-item:hover {
   transform: translateY(-2px);
   border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .archive-copy {
@@ -226,6 +283,7 @@ onMounted(async () => {
 .archive-copy strong {
   display: block;
   font-size: 1.08rem;
+  line-height: 1.45;
 }
 
 .archive-meta {
@@ -234,14 +292,16 @@ onMounted(async () => {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+  font-size: 0.78rem;
 }
 
 .item-summary {
   margin: 8px 0 0;
+  line-height: 1.7;
 }
 
 .empty {
-  padding: 28px 0;
+  padding: 34px 0;
   text-align: center;
 }
 
@@ -251,6 +311,8 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .pager-actions {
@@ -258,24 +320,33 @@ onMounted(async () => {
   gap: 12px;
 }
 
-@media (max-width: 720px) {
-  .toolbar,
+@media (max-width: 840px) {
+  .archive-hero,
+  .archive-item,
   .pager {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .archive-item {
     flex-direction: column;
   }
 
   .archive-meta {
-    min-width: 0;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .archive-panel {
+    padding: 22px;
+  }
+
+  .toolbar {
+    grid-template-columns: 1fr;
   }
 
   .pager-actions {
-    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .pager-actions :deep(.el-button) {
+    flex: 1;
   }
 }
 </style>

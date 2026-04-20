@@ -253,6 +253,10 @@
         DELETE FROM post_tags WHERE post_id = #{postId}
     </delete>
 
+    <delete id="deletePostTagsByTagId">
+        DELETE FROM post_tags WHERE tag_id = #{tagId}
+    </delete>
+
     <insert id="insertPostTags">
         INSERT INTO post_tags (post_id, tag_id)
         VALUES

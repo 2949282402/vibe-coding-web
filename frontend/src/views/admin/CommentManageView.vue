@@ -48,44 +48,43 @@ onMounted(loadData);
 </script>
 
 <template>
-  <section class="section-card panel admin-surface" v-loading="loading">
-    <div class="section-heading">
+  <section class="section-card admin-surface admin-panel admin-page-stack" v-loading="loading">
+    <div class="admin-page-head">
       <div>
+        <span class="admin-kicker">Moderation</span>
         <h2>{{ preferences.t('commentManage.title') }}</h2>
         <p class="muted panel-hint">{{ preferences.t('commentManage.reviewHint') }}</p>
       </div>
-      <span class="muted">{{ preferences.t('commentManage.records', { count: comments.length }) }}</span>
+      <span class="admin-badge">{{ preferences.t('commentManage.records', { count: comments.length }) }}</span>
     </div>
 
-    <el-table :data="comments">
-      <el-table-column prop="nickname" :label="preferences.t('commentManage.nickname')" width="120" />
-      <el-table-column prop="postTitle" :label="preferences.t('commentManage.post')" min-width="200" />
-      <el-table-column prop="content" :label="preferences.t('commentManage.comment')" min-width="260" />
-      <el-table-column :label="preferences.t('commentManage.status')" width="140">
-        <template #default="{ row }">
-          <span :class="statusTone(row.status)">{{ statusLabel(row.status) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column :label="preferences.t('commentManage.submittedAt')" width="180">
-        <template #default="{ row }">
-          {{ preferences.formatDateTime(row.createdAt) }}
-        </template>
-      </el-table-column>
-      <el-table-column :label="preferences.t('commentManage.actions')" width="180" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="success" @click="review(row.id, 'APPROVED')">{{ preferences.t('commentManage.approve') }}</el-button>
-          <el-button link type="danger" @click="review(row.id, 'REJECTED')">{{ preferences.t('commentManage.reject') }}</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="admin-table-wrap">
+      <el-table :data="comments">
+        <el-table-column prop="nickname" :label="preferences.t('commentManage.nickname')" width="120" />
+        <el-table-column prop="postTitle" :label="preferences.t('commentManage.post')" min-width="200" />
+        <el-table-column prop="content" :label="preferences.t('commentManage.comment')" min-width="260" />
+        <el-table-column :label="preferences.t('commentManage.status')" width="140">
+          <template #default="{ row }">
+            <span :class="statusTone(row.status)">{{ statusLabel(row.status) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="preferences.t('commentManage.submittedAt')" width="180">
+          <template #default="{ row }">
+            {{ preferences.formatDateTime(row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="preferences.t('commentManage.actions')" width="180" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="success" @click="review(row.id, 'APPROVED')">{{ preferences.t('commentManage.approve') }}</el-button>
+            <el-button link type="danger" @click="review(row.id, 'REJECTED')">{{ preferences.t('commentManage.reject') }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.panel {
-  padding: 24px;
-}
-
 .admin-surface :deep(.el-table),
 .admin-surface :deep(.el-table__inner-wrapper),
 .admin-surface :deep(.el-table__header-wrapper),
@@ -105,36 +104,20 @@ onMounted(loadData);
   background: var(--table-surface) !important;
 }
 
-.admin-surface :deep(.el-table) {
-  border-radius: 18px;
-  overflow: hidden;
-}
-
 .panel-hint {
   margin: 8px 0 0;
 }
 
 .status-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 88px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.04);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.72rem;
 }
 
 .status-approved {
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-main);
+  border-color: var(--line-strong);
 }
 
 .status-rejected {
-  color: #c2c2c2;
+  color: var(--text-secondary);
 }
 </style>
