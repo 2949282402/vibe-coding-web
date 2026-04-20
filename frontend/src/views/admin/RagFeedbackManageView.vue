@@ -227,7 +227,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="section-card admin-surface admin-panel admin-page-stack" v-loading="loading">
+  <section class="section-card admin-surface admin-panel admin-page-stack feedback-page" v-loading="loading">
     <div class="admin-page-head">
       <div>
         <span class="admin-kicker">Signal Review</span>
@@ -313,8 +313,22 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.feedback-page {
+  height: 100%;
+  overflow: hidden;
+}
+
 .manage-toolbar {
   grid-template-columns: minmax(0, 1.3fr) 180px 260px auto auto;
+}
+
+.admin-table-wrap {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.admin-table-wrap :deep(.el-table) {
+  height: 100%;
 }
 
 .admin-surface :deep(.el-input__wrapper),
@@ -367,6 +381,16 @@ onMounted(async () => {
 }
 
 @media (max-width: 960px) {
+  .feedback-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .admin-table-wrap {
+    flex: none;
+    overflow: hidden;
+  }
+
   .manage-toolbar {
     grid-template-columns: 1fr;
   }

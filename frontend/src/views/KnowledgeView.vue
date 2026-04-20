@@ -8,6 +8,8 @@ import {
   deleteKnowledgeSessionApi,
   fetchKnowledgeHistoryApi,
   fetchKnowledgeSessionsApi,
+  purgeKnowledgeSessionApi,
+  replayKnowledgeApi,
   renameKnowledgeSessionApi,
   restoreKnowledgeSessionApi,
   submitKnowledgeFeedbackApi
@@ -36,6 +38,8 @@ const result = ref(null);
 const history = ref([]);
 const pendingTurn = ref(null);
 const feedbackSubmittingId = ref(null);
+const editingMessageId = ref(null);
+const editingMessageContent = ref('');
 const searchMode = ref(readSearchMode());
 const activeSessionId = ref(readSessionId());
 const activeSourceMessageId = ref(null);
@@ -100,14 +104,12 @@ const copy = computed(() => {
       ask: '发送',
       asking: '生成中',
       stop: '停止',
-      placeholder: '输入你的问题，例如：这个博客系统现在是怎么部署的？',
+      placeholder: '输入你的问题',
       streaming: '正在生成带引用的回答...',
       sessionsTitle: '会话列表',
       deletedTitle: '最近删除',
-      examplesTitle: '推荐提问',
       sourcesTitle: '参考来源',
       followUpsTitle: '延伸问题',
-      threadMapTitle: '当前线索',
       capabilityTitle: '能力边界',
       capabilityCitations: '严格引用',
       capabilityHistory: '多轮会话',
@@ -138,6 +140,7 @@ const copy = computed(() => {
       rename: '重命名',
       remove: '删除',
       restore: '恢复',
+      purge: '永久删除',
       renameTitle: '重命名会话',
       renamePrompt: '输入新的会话标题',
       renamePlaceholder: '请输入会话标题',
@@ -146,6 +149,9 @@ const copy = computed(() => {
       deleteConfirmBody: '该会话会进入最近删除列表，之后仍可恢复。',
       deleteSuccess: '会话已删除',
       restoreSuccess: '会话已恢复',
+      purgeConfirmTitle: '永久删除会话',
+      purgeConfirmBody: '永久删除后，该会话以及聊天记录都无法恢复，确认继续吗？',
+      purgeSuccess: '会话已永久删除',
       activeSession: '当前会话',
       untitledSession: '未命名会话',
       turnLabel: '问题',
@@ -170,14 +176,12 @@ const copy = computed(() => {
     ask: 'Send',
     asking: 'Thinking',
     stop: 'Stop',
-    placeholder: 'Ask the knowledge base something, for example: how is this blog deployed?',
+    placeholder: 'Ask the knowledge base something',
     streaming: 'Generating cited answer...',
     sessionsTitle: 'Sessions',
     deletedTitle: 'Recently Deleted',
-    examplesTitle: 'Suggested Prompts',
     sourcesTitle: 'Sources',
     followUpsTitle: 'Follow-ups',
-    threadMapTitle: 'Thread Map',
     capabilityTitle: 'Capabilities',
     capabilityCitations: 'Strict citations',
     capabilityHistory: 'Multi-session memory',
@@ -208,6 +212,7 @@ const copy = computed(() => {
     rename: 'Rename',
     remove: 'Delete',
     restore: 'Restore',
+    purge: 'Permanently Delete',
     renameTitle: 'Rename Session',
     renamePrompt: 'Enter a new title for this conversation',
     renamePlaceholder: 'Conversation title',
@@ -216,6 +221,9 @@ const copy = computed(() => {
     deleteConfirmBody: 'The conversation will move to Recently Deleted and can be restored later.',
     deleteSuccess: 'Session deleted',
     restoreSuccess: 'Session restored',
+    purgeConfirmTitle: 'Permanently Delete Session',
+    purgeConfirmBody: 'This permanently removes the session and its chat history. Continue?',
+    purgeSuccess: 'Session permanently deleted',
     activeSession: 'Active Session',
     untitledSession: 'Untitled Session',
     turnLabel: 'Turn',
@@ -273,24 +281,6 @@ function renderAssistantContent(message) {
     anchorPrefix: messageSourceAnchorPrefix(message?.id)
   });
 }
-
-const examples = computed(() => {
-  if (preferences.locale === 'zh-CN') {
-    return [
-      '这个博客系统当前使用了哪些核心技术栈？',
-      '后台管理端现在覆盖了哪些能力？',
-      '下一轮产品迭代最值得优先做什么？',
-      '当前项目里的 RAG 架构是如何实现的？'
-    ];
-  }
-
-  return [
-    'What are the core technologies used in this blog system?',
-    'What capabilities are covered by the admin console?',
-    'What should be the next product iteration for this project?',
-    'How is the current RAG architecture implemented?'
-  ];
-});
 
 const activeSession = computed(() =>
   sessions.value.find((item) => item.sessionId === activeSessionId.value && !item.deleted) || null
@@ -404,6 +394,32 @@ const timelineMessages = computed(() => {
   }));
 });
 
+const messageActionCopy = computed(() => {
+  if (preferences.locale === 'zh-CN') {
+    return {
+      copy: '复制',
+      edit: '修改提问',
+      retry: '重新回复',
+      save: '发送修改后提问',
+      cancel: '取消',
+      copied: '消息已复制',
+      copyFailed: '复制失败',
+      emptyEdit: '请输入要修改的内容'
+    };
+  }
+
+  return {
+    copy: 'Copy',
+    edit: 'Edit',
+    retry: 'Retry',
+    save: 'Send edited message',
+    cancel: 'Cancel',
+    copied: 'Message copied',
+    copyFailed: 'Copy failed',
+    emptyEdit: 'Please enter updated content'
+  };
+});
+
 const assistantMessagesWithSources = computed(() =>
   timelineMessages.value.filter(
     (message) => message.role === 'assistant' && !message.skeleton && Array.isArray(message.sources) && message.sources.length
@@ -433,21 +449,6 @@ const visibleBlogSources = computed(() =>
 );
 const visibleWebSources = computed(() =>
   webSourcesExpanded.value ? webSources.value : webSources.value.slice(0, SOURCE_PREVIEW_LIMIT)
-);
-
-const threadMap = computed(() =>
-  timelineMessages.value
-    .filter((message) => message.role === 'user')
-    .map((message, order) => ({
-      id: `${message.id || 'turn'}-${order}`,
-      order: order + 1,
-      messageIndex: message.messageIndex,
-      preview:
-        (message.content || '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 72) || copy.value.untitledSession
-    }))
 );
 
 const composerStatus = computed(() => {
@@ -516,6 +517,22 @@ function sourceMetaLabel(source) {
   return source.slug || copy.value.blogSourceLabel;
 }
 
+function shouldShowInlineSources(message) {
+  if (
+    message?.role !== 'assistant' ||
+    message.pending ||
+    message.skeleton ||
+    !Array.isArray(message.sources) ||
+    !message.sources.length
+  ) {
+    return false;
+  }
+
+  return timelineMessages.value.some(
+    (item) => item.messageIndex > message.messageIndex && item.role === 'user'
+  );
+}
+
 function shouldShowInlineFollowUps(message) {
   return (
     message?.role === 'assistant' &&
@@ -524,6 +541,89 @@ function shouldShowInlineFollowUps(message) {
     latestFollowUps.value.length > 0 &&
     message.id === latestAssistantTimelineMessageId.value
   );
+}
+
+function shouldShowMessageActions(message) {
+  return !message?.pending && !message?.skeleton;
+}
+
+async function copyMessageContent(message) {
+  const content = String(message?.content || '').trim();
+  if (!content) {
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(content);
+    } else {
+      const input = document.createElement('textarea');
+      input.value = content;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+    }
+    ElMessage.success(messageActionCopy.value.copied);
+  } catch (error) {
+    ElMessage.error(error?.message || messageActionCopy.value.copyFailed);
+  }
+}
+
+function startEditMessage(message) {
+  editingMessageId.value = message?.id || null;
+  editingMessageContent.value = message?.content || '';
+}
+
+function cancelEditMessage() {
+  editingMessageId.value = null;
+  editingMessageContent.value = '';
+}
+
+async function submitEditedMessage() {
+  const normalized = String(editingMessageContent.value || '').trim();
+  if (!normalized) {
+    ElMessage.warning(messageActionCopy.value.emptyEdit);
+    return;
+  }
+
+  const messageId = editingMessageId.value;
+  cancelEditMessage();
+  await replayConversation(messageId, normalized);
+}
+
+async function retryAssistantMessage(message) {
+  await replayConversation(message?.id);
+}
+
+async function replayConversation(messageId, questionOverride = '') {
+  if (!messageId) {
+    return;
+  }
+
+  stopStreaming();
+  closeSidebar();
+  cancelEditMessage();
+  loading.value = true;
+  streaming.value = false;
+
+  try {
+    const res = await replayKnowledgeApi({
+      sessionId: activeSessionId.value,
+      messageId,
+      question: questionOverride || undefined,
+      topK: DEFAULT_TOP_K,
+      searchMode: searchMode.value
+    });
+    applyResponse(res.data, { clearPending: true });
+    await loadSessions();
+    await scrollConversationToBottom(true);
+  } catch (error) {
+    ElMessage.error(error?.message || 'Request failed');
+  } finally {
+    loading.value = false;
+    streaming.value = false;
+  }
 }
 
 function setActiveSourceMessage(messageId) {
@@ -678,15 +778,6 @@ function closeSidebar() {
   }
 }
 
-async function jumpToMessage(messageIndex) {
-  await nextTick();
-  const target = conversationViewport.value?.querySelector(`[data-message-index="${messageIndex}"]`);
-  if (target) {
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-  closeSidebar();
-}
-
 function clearPendingTurn() {
   pendingTurn.value = null;
 }
@@ -811,6 +902,7 @@ async function loadHistory(sessionToLoad = activeSessionId.value) {
   historyLoading.value = true;
   result.value = null;
   clearPendingTurn();
+  cancelEditMessage();
 
   try {
     const res = await fetchKnowledgeHistoryApi(sessionToLoad);
@@ -922,6 +1014,7 @@ async function submitQuestion(presetQuestion = '') {
 
   stopStreaming();
   closeSidebar();
+  cancelEditMessage();
   question.value = '';
 
   try {
@@ -974,6 +1067,7 @@ function startNewChat() {
   result.value = null;
   history.value = [];
   clearPendingTurn();
+  cancelEditMessage();
   activeSessionId.value = createSessionId();
   persistActiveSession();
   syncRouteSession(activeSessionId.value);
@@ -1037,6 +1131,33 @@ async function restoreSession(session) {
     ElMessage.success(copy.value.restoreSuccess);
   } catch (error) {
     ElMessage.error(error?.message || 'Request failed');
+  }
+}
+
+async function purgeSession(session) {
+  try {
+    await ElMessageBox.confirm(copy.value.purgeConfirmBody, copy.value.purgeConfirmTitle, {
+      confirmButtonText: copy.value.purge,
+      cancelButtonText: 'Cancel',
+      type: 'warning'
+    });
+
+    await purgeKnowledgeSessionApi(session.sessionId);
+    await loadSessions();
+    ElMessage.success(copy.value.purgeSuccess);
+
+    if (session.sessionId === activeSessionId.value) {
+      const nextSession = sessions.value.find((item) => !item.deleted);
+      if (nextSession) {
+        await switchSession(nextSession.sessionId);
+      } else {
+        startNewChat();
+      }
+    }
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error?.message || 'Request failed');
+    }
   }
 }
 
@@ -1133,9 +1254,6 @@ onBeforeUnmount(() => {
         <el-button v-if="sidebarExpanded" class="new-chat-btn" type="primary" @click="startNewChat()">
           {{ copy.newChat }}
         </el-button>
-        <button v-else type="button" class="mini-action" aria-label="New chat" @click="startNewChat()">
-          +
-        </button>
       </div>
 
       <div v-if="sidebarExpanded" class="sidebar-scroll">
@@ -1180,24 +1298,6 @@ onBeforeUnmount(() => {
           <p v-else class="muted sidebar-empty">{{ copy.sessionEmpty }}</p>
         </section>
 
-        <section class="sidebar-section">
-          <div class="section-heading compact-heading">
-            <h2>{{ copy.examplesTitle }}</h2>
-          </div>
-          <div class="prompt-list">
-            <button
-              v-for="item in examples"
-              :key="item"
-              type="button"
-              class="prompt-chip"
-              :disabled="loading"
-              @click="submitQuestion(item)"
-            >
-              {{ item }}
-            </button>
-          </div>
-        </section>
-
         <section class="sidebar-section sidebar-section-muted">
           <div class="section-heading compact-heading">
             <h2>{{ copy.capabilityTitle }}</h2>
@@ -1233,25 +1333,14 @@ onBeforeUnmount(() => {
                 <button type="button" class="ghost-action" @click="restoreSession(session)">
                   {{ copy.restore }}
                 </button>
+                <button type="button" class="ghost-action danger danger-strong" @click="purgeSession(session)">
+                  {{ copy.purge }}
+                </button>
               </div>
             </article>
           </div>
           <p v-else class="muted sidebar-empty">{{ copy.deletedEmpty }}</p>
         </section>
-      </div>
-
-      <div v-else class="sidebar-collapsed-actions">
-        <button
-          v-for="session in visibleSessions.slice(0, 6)"
-          :key="`collapsed-${session.sessionId}`"
-          type="button"
-          class="mini-action"
-          :class="{ active: session.sessionId === activeSessionId }"
-          :aria-label="session.title"
-          @click="switchSession(session.sessionId)"
-        >
-          {{ (session.title || copy.untitledSession).slice(0, 1).toUpperCase() }}
-        </button>
       </div>
     </aside>
 
@@ -1375,6 +1464,34 @@ onBeforeUnmount(() => {
                   v-html="message.renderedContent"
                 ></div>
 
+                <div v-if="shouldShowMessageActions(message)" class="message-actions">
+                  <button type="button" class="ghost-action message-action-btn" @click="copyMessageContent(message)">
+                    {{ messageActionCopy.copy }}
+                  </button>
+                  <button type="button" class="ghost-action message-action-btn" @click="retryAssistantMessage(message)">
+                    {{ messageActionCopy.retry }}
+                  </button>
+                </div>
+
+                <div v-if="shouldShowInlineSources(message)" class="inline-sources">
+                  <span class="inline-sources-label muted">{{ copy.sourcesTitle }}</span>
+                  <div class="inline-source-list">
+                    <button
+                      v-for="source in message.sources"
+                      :key="sourceKey(source)"
+                      type="button"
+                      class="inline-source-chip"
+                      @click="jumpToCitationSource(message.id, source.citationIndex)"
+                    >
+                      <span class="inline-source-index">[{{ source.citationIndex }}]</span>
+                      <span class="inline-source-title">{{ source.title || sourceMetaLabel(source) }}</span>
+                      <span class="inline-source-type" :class="{ web: isWebSource(source) }">
+                        {{ sourceTypeLabel(source) }}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
                 <div v-if="shouldShowInlineFollowUps(message)" class="inline-followups">
                   <span class="inline-followups-label muted">{{ copy.followUpsTitle }}</span>
                   <div class="prompt-list inline-followups-list">
@@ -1392,9 +1509,37 @@ onBeforeUnmount(() => {
                 </div>
               </template>
 
-              <div v-else class="chat-bubble user-bubble" :class="{ pending: message.pending }">
-                {{ message.content }}
-              </div>
+              <template v-else>
+                <div class="chat-bubble user-bubble" :class="{ pending: message.pending }">
+                  {{ message.content }}
+                </div>
+
+                <div v-if="shouldShowMessageActions(message)" class="message-actions">
+                  <button type="button" class="ghost-action message-action-btn" @click="copyMessageContent(message)">
+                    {{ messageActionCopy.copy }}
+                  </button>
+                  <button type="button" class="ghost-action message-action-btn" @click="startEditMessage(message)">
+                    {{ messageActionCopy.edit }}
+                  </button>
+                </div>
+
+                <div v-if="editingMessageId === message.id" class="message-edit-shell">
+                  <el-input
+                    v-model="editingMessageContent"
+                    type="textarea"
+                    resize="none"
+                    :rows="3"
+                  />
+                  <div class="message-edit-actions">
+                    <el-button type="primary" :disabled="loading" @click="submitEditedMessage">
+                      {{ messageActionCopy.save }}
+                    </el-button>
+                    <el-button :disabled="loading" @click="cancelEditMessage">
+                      {{ messageActionCopy.cancel }}
+                    </el-button>
+                  </div>
+                </div>
+              </template>
             </div>
           </article>
         </div>
@@ -1403,18 +1548,6 @@ onBeforeUnmount(() => {
           <span class="empty-eyebrow muted">{{ copy.strictCitation }}</span>
           <h3>{{ copy.emptyStateTitle }}</h3>
           <p class="muted">{{ copy.emptyStateBody }}</p>
-          <div class="empty-prompt-grid">
-            <button
-              v-for="item in examples"
-              :key="`empty-${item}`"
-              type="button"
-              class="prompt-chip prompt-chip-block"
-              :disabled="loading"
-              @click="submitQuestion(item)"
-            >
-              {{ item }}
-            </button>
-          </div>
         </div>
       </div>
 
@@ -1568,25 +1701,6 @@ onBeforeUnmount(() => {
         </div>
         <p v-else class="muted rail-empty">{{ copy.noSources }}</p>
       </section>
-
-      <section class="section-card context-panel">
-        <div class="section-heading compact-heading">
-          <h2>{{ copy.threadMapTitle }}</h2>
-        </div>
-        <div v-if="threadMap.length" class="thread-map">
-          <button
-            v-for="item in threadMap"
-            :key="item.id"
-            type="button"
-            class="thread-item"
-            @click="jumpToMessage(item.messageIndex)"
-          >
-            <span class="thread-index">{{ copy.turnLabel }} {{ item.order }}</span>
-            <span class="thread-preview">{{ item.preview }}</span>
-          </button>
-        </div>
-        <p v-else class="muted rail-empty">{{ copy.noThreadMap }}</p>
-      </section>
     </aside>
   </div>
 </template>
@@ -1595,18 +1709,18 @@ onBeforeUnmount(() => {
 .knowledge-shell {
   position: relative;
   width: 100%;
-  min-height: calc(100vh - 122px);
-  height: calc(100vh - 122px);
-  max-height: calc(100vh - 122px);
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
   margin: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 300px;
-  gap: 12px;
+  gap: 14px;
   align-items: stretch;
 }
 
 .knowledge-shell.sidebar-collapsed {
-  grid-template-columns: 84px minmax(0, 1fr) 300px;
+  grid-template-columns: 72px minmax(0, 1fr) 300px;
 }
 
 .sidebar-overlay {
@@ -1633,8 +1747,11 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-radius: 28px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
-    rgba(8, 8, 8, 0.92);
+    radial-gradient(circle at top left, rgba(224, 208, 180, 0.1), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
+    rgba(9, 9, 9, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.22);
 }
 
 .sidebar-toolbar {
@@ -1696,13 +1813,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 18px;
-}
-
-.sidebar-collapsed-actions {
-  margin-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .sidebar-head {
@@ -1778,21 +1888,23 @@ onBeforeUnmount(() => {
 .session-item {
   padding: 12px;
   border-radius: 18px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.028);
   cursor: pointer;
   transition: 0.2s ease;
 }
 
 .session-item:hover {
-  border-color: var(--line);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(215, 199, 173, 0.22);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .session-item.active {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.085);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-color: rgba(219, 203, 178, 0.2);
+  background:
+    linear-gradient(180deg, rgba(216, 196, 164, 0.1), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .session-item.deleted {
@@ -1837,6 +1949,23 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   cursor: pointer;
   font-size: 0.72rem;
+}
+
+.ghost-action.danger {
+  border-color: rgba(255, 118, 118, 0.16);
+}
+
+.ghost-action.danger-strong {
+  color: #ffd6d6;
+  border-color: rgba(255, 110, 110, 0.28);
+  background: linear-gradient(180deg, rgba(120, 28, 28, 0.28), rgba(72, 16, 16, 0.18));
+  box-shadow: inset 0 1px 0 rgba(255, 214, 214, 0.08);
+}
+
+.ghost-action.danger-strong:hover {
+  border-color: rgba(255, 126, 126, 0.42);
+  background: linear-gradient(180deg, rgba(150, 34, 34, 0.34), rgba(88, 18, 18, 0.24));
+  color: #fff1f1;
 }
 
 .ghost-action.danger:hover {
@@ -1886,17 +2015,18 @@ onBeforeUnmount(() => {
 
 .chat-stage {
   min-height: 0;
-  height: calc(100vh - 122px);
-  max-height: calc(100vh - 122px);
+  height: 100%;
+  max-height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   border-radius: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   background:
-    radial-gradient(circle at top center, rgba(255, 255, 255, 0.04), transparent 24%),
-    rgba(11, 11, 11, 0.94);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+    radial-gradient(circle at top center, rgba(222, 205, 173, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015)),
+    rgba(12, 12, 12, 0.92);
+  box-shadow: 0 26px 72px rgba(0, 0, 0, 0.26);
 }
 
 .chat-stage-head {
@@ -1905,8 +2035,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 18px;
   padding: 18px 22px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012));
 }
 
 .stage-copy {
@@ -2044,6 +2174,41 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-action-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 248, 233, 0.04);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.message-action-btn:hover {
+  color: var(--text-main);
+  border-color: var(--line-strong);
+  background: rgba(255, 248, 233, 0.08);
+}
+
+.message-edit-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.message-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .inline-followups {
   display: flex;
   flex-direction: column;
@@ -2051,10 +2216,75 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
+.inline-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.inline-sources-label,
 .inline-followups-label {
   font-size: 0.74rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.inline-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(100%, 360px);
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: 0.18s ease;
+  min-width: 0;
+}
+
+.inline-source-chip:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+
+.inline-source-index {
+  flex: none;
+  font-size: 0.72rem;
+  color: var(--text-main);
+}
+
+.inline-source-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.inline-source-type {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inline-source-type.web {
+  background: rgba(205, 186, 146, 0.14);
+  color: #dbc290;
 }
 
 .inline-followups-list {
@@ -2254,7 +2484,7 @@ onBeforeUnmount(() => {
   bottom: 0;
   z-index: 3;
   padding: 14px 18px 18px;
-  background: linear-gradient(180deg, rgba(11, 11, 11, 0), rgba(11, 11, 11, 0.82) 28%, rgba(11, 11, 11, 0.96));
+  background: linear-gradient(180deg, rgba(11, 11, 11, 0), rgba(11, 11, 11, 0.72) 28%, rgba(11, 11, 11, 0.92));
   backdrop-filter: blur(18px);
 }
 
@@ -2264,9 +2494,11 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   padding: 12px;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(18, 18, 18, 0.94);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    rgba(17, 17, 17, 0.92);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
 }
 
 .composer-card-top {
@@ -2451,7 +2683,7 @@ onBeforeUnmount(() => {
 .context-rail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   height: 100%;
   max-height: 100%;
   min-height: 0;
@@ -2469,6 +2701,10 @@ onBeforeUnmount(() => {
   padding: 16px;
   border-radius: 24px;
   overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(218, 201, 170, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018)),
+    rgba(10, 10, 10, 0.9);
 }
 
 .rail-hint,
@@ -2584,8 +2820,8 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 12px 13px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.028);
   transition: 0.2s ease;
   scroll-margin-top: 18px;
 }
@@ -2686,13 +2922,15 @@ onBeforeUnmount(() => {
 
 html[data-theme='light'] .knowledge-sidebar {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 246, 243, 0.92)),
+    radial-gradient(circle at top left, rgba(196, 171, 130, 0.16), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 241, 236, 0.96)),
     rgba(248, 248, 245, 0.96);
 }
 
 html[data-theme='light'] .chat-stage {
   background:
-    radial-gradient(circle at top center, rgba(0, 0, 0, 0.04), transparent 24%),
+    radial-gradient(circle at top center, rgba(196, 171, 130, 0.14), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 241, 236, 0.96)),
     rgba(248, 248, 245, 0.95);
 }
 
@@ -2740,6 +2978,26 @@ html[data-theme='light'] .source-group.is-web {
     rgba(0, 0, 0, 0.03);
 }
 
+html[data-theme='light'] .context-panel {
+  background:
+    radial-gradient(circle at top left, rgba(196, 171, 130, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 241, 236, 0.96)),
+    rgba(248, 248, 245, 0.96);
+}
+
+html[data-theme='light'] .ghost-action.danger-strong {
+  color: #842828;
+  border-color: rgba(176, 52, 52, 0.24);
+  background: linear-gradient(180deg, rgba(255, 218, 218, 0.96), rgba(248, 231, 231, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+html[data-theme='light'] .ghost-action.danger-strong:hover {
+  color: #6f1c1c;
+  border-color: rgba(176, 52, 52, 0.34);
+  background: linear-gradient(180deg, rgba(255, 208, 208, 0.98), rgba(245, 222, 222, 0.98));
+}
+
 @keyframes status-pulse {
   0%,
   80%,
@@ -2767,9 +3025,9 @@ html[data-theme='light'] .source-group.is-web {
 @media (min-width: 1800px) {
   .knowledge-shell {
     grid-template-columns: 320px minmax(0, 1fr) 320px;
-    min-height: calc(100vh - 126px);
-    height: calc(100vh - 126px);
-    max-height: calc(100vh - 126px);
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
   }
 
   .knowledge-shell.sidebar-collapsed {
@@ -2781,10 +3039,6 @@ html[data-theme='light'] .source-group.is-web {
     width: min(920px, 100%);
   }
 
-  .chat-stage {
-    height: calc(100vh - 126px);
-    max-height: calc(100vh - 126px);
-  }
 }
 
 @media (max-width: 1500px) {
@@ -2817,7 +3071,7 @@ html[data-theme='light'] .source-group.is-web {
   .knowledge-shell,
   .knowledge-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
-    min-height: calc(100vh - 108px);
+    min-height: 0;
     height: auto;
     max-height: none;
   }
@@ -2845,16 +3099,12 @@ html[data-theme='light'] .source-group.is-web {
     max-height: none;
   }
 
-  .chat-stage {
-    height: calc(100vh - 108px);
-    max-height: calc(100vh - 108px);
-  }
 }
 
 @media (max-width: 720px) {
   .knowledge-shell {
     gap: 10px;
-    min-height: calc(100vh - 88px);
+    min-height: 0;
     height: auto;
     max-height: none;
   }
@@ -2896,10 +3146,6 @@ html[data-theme='light'] .source-group.is-web {
     gap: 22px;
   }
 
-  .empty-prompt-grid {
-    grid-template-columns: 1fr;
-  }
-
   .composer-shell {
     padding: 12px 10px 12px;
   }
@@ -2908,10 +3154,6 @@ html[data-theme='light'] .source-group.is-web {
     max-width: 100%;
   }
 
-  .chat-stage {
-    height: calc(100vh - 88px);
-    max-height: calc(100vh - 88px);
-  }
 }
 
 @media (max-width: 560px) {
@@ -2955,7 +3197,7 @@ html[data-theme='light'] .source-group.is-web {
 
 @media (max-width: 420px) {
   .knowledge-shell {
-    min-height: calc(100vh - 76px);
+    min-height: 0;
     height: auto;
     max-height: none;
   }
@@ -2989,9 +3231,5 @@ html[data-theme='light'] .source-group.is-web {
     font-size: 0.72rem;
   }
 
-  .chat-stage {
-    height: calc(100vh - 76px);
-    max-height: calc(100vh - 76px);
-  }
 }
 </style>

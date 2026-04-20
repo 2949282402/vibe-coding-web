@@ -25,4 +25,6 @@ public interface RagChatSessionMapper {
     int updateTitle(@Param("sessionId") String sessionId, @Param("title") String title);
 
     int markDeleted(@Param("sessionId") String sessionId, @Param("deleted") boolean deleted);
+
+    int deleteBySessionId(@Param("sessionId") String sessionId);
 }

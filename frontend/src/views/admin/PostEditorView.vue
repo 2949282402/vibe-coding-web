@@ -571,18 +571,29 @@ onMounted(loadDetail);
 .editor-page {
   max-width: 1520px;
   margin: 0 auto;
+  height: 100%;
+  overflow: hidden;
 }
 
 .editor-stack {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .editor-card {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.content-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .editor-card-head {
@@ -710,10 +721,14 @@ onMounted(loadDetail);
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.85fr);
   gap: 18px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .markdown-pane {
   min-width: 0;
+  min-height: 0;
 }
 
 .pane-title {
@@ -726,10 +741,12 @@ onMounted(loadDetail);
 .preview-pane {
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .markdown-preview {
-  min-height: 640px;
+  min-height: 0;
+  height: 100%;
   padding: 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -737,8 +754,18 @@ onMounted(loadDetail);
   overflow: auto;
 }
 
+:deep(.markdown-input) {
+  height: 100%;
+}
+
+:deep(.markdown-input .el-textarea__inner) {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
 :deep(.markdown-input textarea) {
-  min-height: 640px;
+  min-height: 0;
+  height: 100%;
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   line-height: 1.72;
 }
@@ -788,14 +815,25 @@ onMounted(loadDetail);
 }
 
 @media (max-width: 1180px) {
+  .editor-page,
+  .editor-stack,
+  .content-card,
+  .markdown-layout {
+    height: auto;
+    overflow: visible;
+  }
+
   .settings-grid,
   .markdown-layout {
     grid-template-columns: 1fr;
   }
 
   .markdown-preview,
+  :deep(.markdown-input),
+  :deep(.markdown-input .el-textarea__inner),
   :deep(.markdown-input textarea) {
     min-height: 420px;
+    height: auto !important;
   }
 }
 

@@ -52,14 +52,19 @@ const navItems = computed(() => [
 
 <style scoped>
 .page-shell-immersive {
-  padding: 12px 12px 24px;
+  min-height: 100vh;
+  height: 100vh;
+  padding: 12px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .topbar {
   position: relative;
   z-index: 12;
-  margin-bottom: 30px;
-  padding: 18px 22px;
+  margin-bottom: 34px;
+  padding: 18px 24px;
   border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
@@ -78,12 +83,11 @@ const navItems = computed(() => [
 }
 
 .topbar-immersive {
-  position: sticky;
-  top: 12px;
-  z-index: 20;
+  position: relative;
+  z-index: 12;
   margin-bottom: 12px;
   border-radius: 22px;
-  backdrop-filter: blur(24px);
+  backdrop-filter: blur(20px);
 }
 
 .brand {
@@ -96,9 +100,9 @@ const navItems = computed(() => [
 
 .brand strong {
   display: block;
-  font-size: 1.05rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 1.08rem;
+  letter-spacing: 0.08em;
+  text-transform: none;
 }
 
 .brand p,
@@ -119,9 +123,9 @@ const navItems = computed(() => [
   place-items: center;
   font-weight: 800;
   letter-spacing: 0.18em;
-  color: #050505;
-  background: linear-gradient(135deg, #ffffff, #a8a8a8);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 10px 24px rgba(255, 255, 255, 0.12);
+  color: #1f1710;
+  background: linear-gradient(135deg, #f7ead0, #cfac6d);
+  box-shadow: inset 0 1px 0 rgba(255, 252, 245, 0.72), 0 14px 26px rgba(56, 38, 14, 0.22);
 }
 
 .topbar-actions {
@@ -135,11 +139,11 @@ const navItems = computed(() => [
 }
 
 .glass-subnav {
-  padding: 6px;
+  padding: 7px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: rgba(255, 248, 233, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 233, 0.06);
 }
 
 .nav {
@@ -153,7 +157,7 @@ const navItems = computed(() => [
 .nav a {
   position: relative;
   z-index: 3;
-  padding: 10px 14px;
+  padding: 10px 16px;
   border-radius: 999px;
   border: 1px solid transparent;
   color: var(--text-secondary);
@@ -164,22 +168,23 @@ const navItems = computed(() => [
 .nav .router-link-active {
   color: var(--text-main);
   background: var(--bg-panel-strong);
-  border-color: var(--line);
+  border-color: var(--line-strong);
 }
 
 .footer {
-  padding: 30px 4px 0;
+  padding: 38px 8px 0;
   display: flex;
   justify-content: space-between;
   gap: 16px;
   font-size: 0.84rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
 }
 
 .main-immersive {
-  min-height: calc(100vh - 110px);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 960px) {
@@ -204,7 +209,6 @@ const navItems = computed(() => [
   }
 
   .topbar-immersive {
-    top: 8px;
     margin-bottom: 8px;
   }
 

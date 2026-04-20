@@ -59,14 +59,14 @@ const login = async () => {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 22%),
-    linear-gradient(180deg, #080808 0%, #030303 100%);
+    radial-gradient(circle at top, rgba(220, 193, 136, 0.18), transparent 24%),
+    linear-gradient(180deg, #17130f 0%, #100d0a 100%);
 }
 
 html[data-theme='light'] .login-shell {
   background:
-    radial-gradient(circle at top, rgba(0, 0, 0, 0.05), transparent 24%),
-    linear-gradient(180deg, #f7f7f4 0%, #ecece8 100%);
+    radial-gradient(circle at top, rgba(181, 143, 76, 0.12), transparent 24%),
+    linear-gradient(180deg, #faf5ec 0%, #efe7da 100%);
 }
 
 .login-toolbar {
@@ -78,7 +78,7 @@ html[data-theme='light'] .login-shell {
 
 .login-card {
   width: min(500px, 100%);
-  padding: 36px;
+  padding: 40px;
 }
 
 .login-copy {
@@ -91,6 +91,10 @@ h1 {
   font-size: clamp(2.2rem, 6vw, 2.8rem);
   letter-spacing: -0.05em;
   text-transform: none;
+}
+
+.login-card :deep(.el-form) {
+  margin-top: 22px;
 }
 
 .full {

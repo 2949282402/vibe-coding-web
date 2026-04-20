@@ -185,6 +185,18 @@ public class RagApplicationService {
         return toSessionSummary(knowledgeBaseRepository.findConversationSession(normalizedSessionId));
     }
 
+    public void purgeSession(String sessionId) {
+        String normalizedSessionId = normalizeSessionId(sessionId);
+        ConversationSession session = knowledgeBaseRepository.findConversationSession(normalizedSessionId);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation session not found");
+        }
+        if (!session.deleted()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only deleted sessions can be permanently removed");
+        }
+        knowledgeBaseRepository.deleteConversationSessionPermanently(normalizedSessionId);
+    }
+
     public RagDtos.ChatMessage submitFeedback(RagDtos.FeedbackRequest request) {
         String sessionId = normalizeSessionId(request.sessionId());
         List<ChatHistoryMessage> history = knowledgeBaseRepository.loadConversationHistory(sessionId);
@@ -207,6 +219,96 @@ public class RagApplicationService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation message not found");
         }
         return toDtoMessage(updated);
+    }
+
+    public RagDtos.AskResponse replayConversation(RagDtos.ReplayRequest request) {
+        String sessionId = normalizeSessionId(request.sessionId());
+        ensureSessionExists(sessionId);
+
+        List<ChatHistoryMessage> fullHistory = knowledgeBaseRepository.loadConversationHistory(sessionId);
+        int targetIndex = findMessageIndex(fullHistory, request.messageId());
+        ChatHistoryMessage target = fullHistory.get(targetIndex);
+        ReplayTarget replayTarget = resolveReplayTarget(fullHistory, targetIndex, target, request.question());
+
+        knowledgeBaseRepository.deleteConversationMessagesFrom(sessionId, replayTarget.fromMessageId());
+
+        AnswerContext context = buildAnswerContext(
+                sessionId,
+                replayTarget.question(),
+                request.searchMode(),
+                request.topK(),
+                replayTarget.baseHistory()
+        );
+
+        if (context.prebuiltResponse() != null) {
+            List<RagDtos.ChatMessage> history = persistConversation(
+                    context.sessionId(),
+                    context.question(),
+                    context.prebuiltResponse().answer(),
+                    context.prebuiltResponse().mode(),
+                    List.of(),
+                    context.prebuiltResponse().sources()
+            );
+            return buildAnswerResponse(
+                    context,
+                    context.prebuiltResponse().answer(),
+                    context.prebuiltResponse().mode(),
+                    context.prebuiltResponse().followUpQuestions(),
+                    context.prebuiltResponse().sources(),
+                    history,
+                    context.prebuiltResponse().strictCitation()
+            );
+        }
+
+        if (SEARCH_MODE_LOCAL_AND_WEB.equals(context.searchMode()) && chatModel.supportsWebSearch()) {
+            WebSearchResolution resolution = resolveWithOfficialWebSearch(context);
+            if (resolution != null) {
+                List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
+                List<RagDtos.ChatMessage> history = persistConversation(
+                        context.sessionId(),
+                        context.question(),
+                        resolution.answer(),
+                        resolution.mode(),
+                        citations,
+                        resolution.sources()
+                );
+                return buildAnswerResponse(
+                        context,
+                        resolution.answer(),
+                        resolution.mode(),
+                        resolution.followUpQuestions(),
+                        resolution.sources(),
+                        history,
+                        resolution.strictCitation()
+                );
+            }
+        }
+
+        String answer = context.retrievalAnswer();
+        String mode = "retrieval";
+
+        if (chatModel.isChatConfigured()) {
+            String generated = chatModel.generate(
+                    promptService.buildSystemPrompt(context.question()),
+                    promptService.buildUserPrompt(context.question(), context.evidences(), recentPromptHistory(context.history())),
+                    0.2
+            );
+            if (citationGuardService.isStrictlyCited(generated, context.sources().size())) {
+                answer = generated.trim();
+                mode = "llm";
+            }
+        }
+
+        List<Integer> citations = citationGuardService.extractCitationIndices(answer, context.sources().size());
+        List<RagDtos.ChatMessage> history = persistConversation(
+                context.sessionId(),
+                context.question(),
+                answer,
+                mode,
+                citations,
+                context.sources()
+        );
+        return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true);
     }
 
     private void streamQuestionInternal(RagDtos.AskRequest request, SseEmitter emitter) {
@@ -332,11 +434,23 @@ public class RagApplicationService {
 
     private AnswerContext buildAnswerContext(RagDtos.AskRequest request) {
         String sessionId = normalizeSessionId(request.sessionId());
-        String question = request.question().trim();
-        String requestedSearchMode = normalizeSearchMode(request.searchMode());
-        List<RagDtos.ChatMessage> history = toDtoHistory(
-                limitHistory(knowledgeBaseRepository.loadConversationHistory(sessionId), MAX_RESPONSE_HISTORY_MESSAGES)
+        List<ChatHistoryMessage> baseHistory = limitHistory(
+                knowledgeBaseRepository.loadConversationHistory(sessionId),
+                MAX_RESPONSE_HISTORY_MESSAGES
         );
+        return buildAnswerContext(sessionId, request.question(), request.searchMode(), request.topK(), baseHistory);
+    }
+
+    private AnswerContext buildAnswerContext(
+            String sessionId,
+            String rawQuestion,
+            String rawSearchMode,
+            Integer requestedTopK,
+            List<ChatHistoryMessage> baseHistory
+    ) {
+        String question = rawQuestion.trim();
+        String requestedSearchMode = normalizeSearchMode(rawSearchMode);
+        List<RagDtos.ChatMessage> history = toDtoHistory(limitHistory(baseHistory, MAX_RESPONSE_HISTORY_MESSAGES));
         IndexState indexState = indexingService.ensureIndexReady();
         boolean webSearchRequested = isWebSearchRequested(requestedSearchMode);
         String searchMode = webSearchRequested ? SEARCH_MODE_LOCAL_AND_WEB : SEARCH_MODE_LOCAL_ONLY;
@@ -372,7 +486,7 @@ public class RagApplicationService {
             );
         }
 
-        int topK = normalizeTopK(request.topK());
+        int topK = normalizeTopK(requestedTopK);
         List<ScoredChunk> recalled = indexState.chunkCount() > 0 ? recallChunks(question, topK) : List.of();
         List<ScoredChunk> rankedChunks = recalled.isEmpty()
                 ? List.of()
@@ -432,6 +546,51 @@ public class RagApplicationService {
                 searchMode,
                 null
         );
+    }
+
+    private int findMessageIndex(List<ChatHistoryMessage> history, Long messageId) {
+        for (int index = 0; index < history.size(); index += 1) {
+            if (Objects.equals(history.get(index).id(), messageId)) {
+                return index;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation message not found");
+    }
+
+    private ReplayTarget resolveReplayTarget(
+            List<ChatHistoryMessage> fullHistory,
+            int targetIndex,
+            ChatHistoryMessage target,
+            String editedQuestion
+    ) {
+        if ("user".equals(target.role())) {
+            String question = collapseWhitespace(editedQuestion);
+            if (!StringUtils.hasText(question)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Edited question must not be blank");
+            }
+            return new ReplayTarget(
+                    target.id(),
+                    question,
+                    new ArrayList<>(fullHistory.subList(0, targetIndex))
+            );
+        }
+
+        if (!"assistant".equals(target.role())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only user or assistant messages can be replayed");
+        }
+
+        for (int index = targetIndex - 1; index >= 0; index -= 1) {
+            ChatHistoryMessage candidate = fullHistory.get(index);
+            if ("user".equals(candidate.role())) {
+                return new ReplayTarget(
+                        candidate.id(),
+                        candidate.content(),
+                        new ArrayList<>(fullHistory.subList(0, index))
+                );
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No user message found before the selected assistant response");
     }
 
     private List<ScoredChunk> recallChunks(String question, int topK) {
@@ -756,6 +915,13 @@ public class RagApplicationService {
             List<String> followUpQuestions,
             String mode,
             boolean strictCitation
+    ) {
+    }
+
+    private record ReplayTarget(
+            Long fromMessageId,
+            String question,
+            List<ChatHistoryMessage> baseHistory
     ) {
     }
 

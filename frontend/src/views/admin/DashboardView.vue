@@ -211,11 +211,11 @@ onMounted(loadData);
 .card-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  gap: 20px;
 }
 
 .metric-card {
-  min-height: 170px;
+  min-height: 184px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -224,12 +224,15 @@ onMounted(loadData);
 .metric-card strong {
   display: block;
   font-size: clamp(2.3rem, 4vw, 3rem);
-  margin-top: 18px;
+  margin-top: 20px;
   letter-spacing: -0.06em;
 }
 
 .metric-card-accent {
   border-color: var(--line-strong);
+  background:
+    linear-gradient(180deg, rgba(220, 193, 136, 0.12), rgba(255, 248, 233, 0.04)),
+    var(--admin-surface-bg);
 }
 
 .refined-heading {
@@ -239,7 +242,7 @@ onMounted(loadData);
 .rag-panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
 }
 
 .rag-panel-head {
@@ -262,10 +265,10 @@ onMounted(loadData);
 }
 
 .rag-metric {
-  padding: 18px;
+  padding: 18px 18px 20px;
   border-radius: 22px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--admin-soft-bg);
 }
 
 .rag-metric strong {

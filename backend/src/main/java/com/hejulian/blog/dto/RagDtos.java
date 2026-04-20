@@ -45,6 +45,17 @@ public final class RagDtos {
     ) {
     }
 
+    public record ReplayRequest(
+            @jakarta.validation.constraints.NotNull(message = "messageId must not be null") Long messageId,
+            @NotBlank(message = "sessionId must not be blank") String sessionId,
+            String question,
+            @Min(value = 1, message = "topK must be at least 1")
+            @Max(value = 8, message = "topK must not exceed 8")
+            Integer topK,
+            String searchMode
+    ) {
+    }
+
     public record Source(
             Long postId,
             String title,

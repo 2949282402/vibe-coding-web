@@ -60,9 +60,20 @@ public class RagController {
         return ApiResponse.success(ragApplicationService.restoreSession(sessionId));
     }
 
+    @DeleteMapping("/sessions/{sessionId}/purge")
+    public ApiResponse<Void> purgeSession(@PathVariable String sessionId) {
+        ragApplicationService.purgeSession(sessionId);
+        return ApiResponse.success(null);
+    }
+
     @PostMapping("/feedback")
     public ApiResponse<RagDtos.ChatMessage> submitFeedback(@Valid @RequestBody RagDtos.FeedbackRequest request) {
         return ApiResponse.success(ragApplicationService.submitFeedback(request));
+    }
+
+    @PostMapping("/replay")
+    public ApiResponse<RagDtos.AskResponse> replay(@Valid @RequestBody RagDtos.ReplayRequest request) {
+        return ApiResponse.success(ragApplicationService.replayConversation(request));
     }
 
     @PostMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

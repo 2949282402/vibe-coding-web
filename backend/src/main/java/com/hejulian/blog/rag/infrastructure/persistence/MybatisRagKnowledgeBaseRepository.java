@@ -135,6 +135,11 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     }
 
     @Override
+    public void deleteConversationMessagesFrom(String sessionId, Long fromMessageId) {
+        ragChatMessageMapper.deleteBySessionIdFromMessageId(sessionId, fromMessageId);
+    }
+
+    @Override
     public ConversationSession findConversationSession(String sessionId) {
         return toConversationSession(ragChatSessionMapper.selectBySessionId(sessionId));
     }
@@ -184,6 +189,12 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     @Override
     public void markConversationSessionDeleted(String sessionId, boolean deleted) {
         ragChatSessionMapper.markDeleted(sessionId, deleted);
+    }
+
+    @Override
+    public void deleteConversationSessionPermanently(String sessionId) {
+        ragChatMessageMapper.deleteBySessionId(sessionId);
+        ragChatSessionMapper.deleteBySessionId(sessionId);
     }
 
     private PublishedPost toPublishedPost(Post post) {

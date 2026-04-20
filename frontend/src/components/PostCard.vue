@@ -35,23 +35,23 @@ const preferences = usePreferencesStore();
 .post-card {
   overflow: hidden;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  min-height: 240px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 272px;
   transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
 }
 
 .post-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-5px);
   border-color: var(--line-strong);
-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 30px 72px rgba(36, 24, 9, 0.24);
 }
 
 .cover {
-  min-height: 240px;
+  min-height: 272px;
   position: relative;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.84)),
-    #111;
+    linear-gradient(135deg, rgba(255, 240, 214, 0.22), rgba(18, 14, 10, 0.8)),
+    #1d1712;
   background-size: cover;
   background-position: center;
 }
@@ -60,32 +60,32 @@ const preferences = usePreferencesStore();
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.55)),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 32%);
+    linear-gradient(180deg, transparent, rgba(17, 13, 9, 0.58)),
+    linear-gradient(90deg, rgba(255, 244, 220, 0.1), transparent 34%);
 }
 
 .body {
-  padding: 26px;
+  padding: 28px 30px;
 }
 
 .meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  font-size: 0.84rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  gap: 10px;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
 }
 
 h3 {
-  margin: 18px 0 12px;
-  font-size: 1.6rem;
-  letter-spacing: -0.03em;
+  margin: 18px 0 14px;
+  font-size: 1.72rem;
+  line-height: 1.18;
+  letter-spacing: -0.04em;
 }
 
 p {
   margin: 0 0 18px;
-  line-height: 1.75;
+  line-height: 1.8;
   color: var(--text-secondary);
 }
 

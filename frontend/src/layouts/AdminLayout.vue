@@ -67,16 +67,16 @@ const logout = () => {
 
 <style scoped>
 .sidebar {
-  position: sticky;
-  top: 0;
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  min-height: 100vh;
-  padding: 26px 22px;
+  gap: 24px;
+  min-height: 0;
+  height: 100vh;
+  padding: 28px 24px;
   color: var(--text-main);
   border-right: 1px solid var(--line);
   background: var(--admin-sidebar-bg);
+  overflow: auto;
 }
 
 .sidebar-top {
@@ -101,7 +101,7 @@ const logout = () => {
 }
 
 .brand-card {
-  padding: 18px;
+  padding: 20px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: var(--admin-soft-bg);
@@ -123,8 +123,7 @@ const logout = () => {
   display: inline-flex;
   margin-bottom: 10px;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   font-size: 0.76rem;
 }
 
@@ -171,6 +170,7 @@ const logout = () => {
   background: var(--admin-soft-hover);
   border-color: var(--line-strong);
   transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(44, 28, 10, 0.08);
 }
 
 button {
@@ -182,9 +182,11 @@ button {
 @media (max-width: 960px) {
   .sidebar {
     position: relative;
+    height: auto;
     min-height: auto;
     border-right: none;
     border-bottom: 1px solid var(--line);
+    overflow: visible;
   }
 
   .sidebar-top {

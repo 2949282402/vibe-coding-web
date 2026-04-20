@@ -86,7 +86,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="section-card admin-surface admin-panel admin-page-stack" v-loading="loading">
+  <section class="section-card admin-surface admin-panel admin-page-stack manage-page" v-loading="loading">
     <div class="admin-page-head">
       <div>
         <span class="admin-kicker">Publishing</span>
@@ -155,8 +155,22 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.manage-page {
+  height: 100%;
+  overflow: hidden;
+}
+
 .manage-toolbar {
   grid-template-columns: minmax(0, 1.8fr) 180px auto auto;
+}
+
+.admin-table-wrap {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.admin-table-wrap :deep(.el-table) {
+  height: 100%;
 }
 
 .admin-surface :deep(.el-input__wrapper),
@@ -204,6 +218,16 @@ onMounted(async () => {
 }
 
 @media (max-width: 960px) {
+  .manage-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .admin-table-wrap {
+    flex: none;
+    overflow: hidden;
+  }
+
   .manage-toolbar {
     grid-template-columns: 1fr;
   }

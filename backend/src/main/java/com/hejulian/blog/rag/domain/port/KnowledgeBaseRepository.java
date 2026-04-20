@@ -32,6 +32,8 @@ public interface KnowledgeBaseRepository {
 
     ChatHistoryMessage updateConversationFeedback(String sessionId, Long messageId, Boolean helpful, String note);
 
+    void deleteConversationMessagesFrom(String sessionId, Long fromMessageId);
+
     ConversationSession findConversationSession(String sessionId);
 
     List<ConversationSession> listConversationSessions(boolean includeDeleted, int limit);
@@ -46,4 +48,6 @@ public interface KnowledgeBaseRepository {
     ConversationSession renameConversationSession(String sessionId, String title);
 
     void markConversationSessionDeleted(String sessionId, boolean deleted);
+
+    void deleteConversationSessionPermanently(String sessionId);
 }

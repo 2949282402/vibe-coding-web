@@ -104,7 +104,7 @@ onMounted(loadData);
 </script>
 
 <template>
-  <section class="section-card admin-surface admin-panel admin-page-stack" v-loading="loading">
+  <section class="section-card admin-surface admin-panel admin-page-stack taxonomy-page" v-loading="loading">
     <div class="admin-page-head">
       <div>
         <span class="admin-kicker">{{ copy.kicker }}</span>
@@ -164,6 +164,11 @@ onMounted(loadData);
 </template>
 
 <style scoped>
+.taxonomy-page {
+  height: 100%;
+  overflow: hidden;
+}
+
 .admin-surface :deep(.el-input__wrapper),
 .admin-surface :deep(.el-select__wrapper),
 .admin-surface :deep(.el-textarea__inner) {
@@ -183,6 +188,17 @@ onMounted(loadData);
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+}
+
+.taxonomy-list-card {
+  overflow: hidden;
+}
+
+.taxonomy-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .compact-heading {
@@ -223,6 +239,13 @@ onMounted(loadData);
 }
 
 @media (max-width: 960px) {
+  .taxonomy-page,
+  .taxonomy-list-card,
+  .taxonomy-list {
+    height: auto;
+    overflow: visible;
+  }
+
   .taxonomy-grid {
     grid-template-columns: 1fr;
   }

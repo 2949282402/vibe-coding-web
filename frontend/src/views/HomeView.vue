@@ -141,43 +141,59 @@ onMounted(loadData);
 
 <style scoped>
 .hero-panel {
-  padding: 40px;
+  padding: 46px;
   display: grid;
-  grid-template-columns: 1.3fr 0.82fr;
-  gap: 24px;
+  grid-template-columns: 1.34fr 0.8fr;
+  gap: 28px;
+  overflow: hidden;
+}
+
+.hero-panel::after {
+  content: "";
+  position: absolute;
+  right: -60px;
+  top: -40px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(220, 193, 136, 0.22), transparent 68%);
+  pointer-events: none;
 }
 
 .hero-copy {
   position: relative;
   z-index: 1;
+  max-width: 760px;
 }
 
 .hero-desc {
-  max-width: 620px;
+  max-width: 640px;
   margin-top: 18px;
-  font-size: 1.08rem;
-  line-height: 1.9;
+  font-size: 1.1rem;
+  line-height: 1.95;
 }
 
 .hero-stats {
-  padding: 24px;
+  padding: 26px;
   border-radius: var(--radius-xl);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+  align-self: stretch;
 }
 
 .hero-stats div {
-  padding: 22px;
+  padding: 22px 20px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  background: rgba(255, 248, 233, 0.05);
 }
 
 .hero-stats strong {
   display: block;
-  font-size: 2.4rem;
-  margin-bottom: 8px;
+  font-size: 2.6rem;
+  margin-bottom: 10px;
+  letter-spacing: -0.06em;
 }
 
 .hero-stats span {
@@ -188,7 +204,7 @@ onMounted(loadData);
 }
 
 .content-section {
-  margin-top: 26px;
+  margin-top: 30px;
 }
 
 .stack,
@@ -204,11 +220,14 @@ onMounted(loadData);
 }
 
 .sidebar-card {
-  padding: 22px;
+  padding: 24px;
 }
 
 .rag-card {
   gap: 18px;
+  background:
+    linear-gradient(180deg, rgba(220, 193, 136, 0.12), rgba(255, 248, 233, 0.04)),
+    rgba(21, 18, 14, 0.94);
 }
 
 .rag-copy {
@@ -224,21 +243,19 @@ onMounted(loadData);
   padding: 0 18px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: var(--bg-panel);
+  background: var(--accent-soft);
   color: var(--text-main);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.08em;
   font-size: 0.8rem;
 }
 
 .rag-link:hover {
-  background: var(--bg-panel-hover);
+  background: rgba(220, 193, 136, 0.2);
   border-color: var(--line-strong);
 }
 
 .all-link {
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   font-size: 0.82rem;
 }
 

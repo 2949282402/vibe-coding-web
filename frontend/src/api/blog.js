@@ -13,10 +13,13 @@ export const renameKnowledgeSessionApi = (sessionId, payload) =>
   http.patch(`/public/rag/sessions/${sessionId}`, payload);
 export const deleteKnowledgeSessionApi = (sessionId) =>
   http.delete(`/public/rag/sessions/${sessionId}`);
+export const purgeKnowledgeSessionApi = (sessionId) =>
+  http.delete(`/public/rag/sessions/${sessionId}/purge`);
 export const restoreKnowledgeSessionApi = (sessionId) =>
   http.post(`/public/rag/sessions/${sessionId}/restore`);
 export const submitKnowledgeFeedbackApi = (payload) => http.post('/public/rag/feedback', payload);
 export const askKnowledgeApi = (payload) => http.post('/public/rag/ask', payload, { timeout: 300000 });
+export const replayKnowledgeApi = (payload) => http.post('/public/rag/replay', payload, { timeout: 300000 });
 
 export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
   const response = await fetch('/api/public/rag/ask/stream', {

@@ -48,7 +48,7 @@ onMounted(loadData);
 </script>
 
 <template>
-  <section class="section-card admin-surface admin-panel admin-page-stack" v-loading="loading">
+  <section class="section-card admin-surface admin-panel admin-page-stack comment-page" v-loading="loading">
     <div class="admin-page-head">
       <div>
         <span class="admin-kicker">Moderation</span>
@@ -85,6 +85,20 @@ onMounted(loadData);
 </template>
 
 <style scoped>
+.comment-page {
+  height: 100%;
+  overflow: hidden;
+}
+
+.admin-table-wrap {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.admin-table-wrap :deep(.el-table) {
+  height: 100%;
+}
+
 .admin-surface :deep(.el-table),
 .admin-surface :deep(.el-table__inner-wrapper),
 .admin-surface :deep(.el-table__header-wrapper),
@@ -119,5 +133,17 @@ onMounted(loadData);
 
 .status-rejected {
   color: var(--text-secondary);
+}
+
+@media (max-width: 960px) {
+  .comment-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .admin-table-wrap {
+    flex: none;
+    overflow: hidden;
+  }
 }
 </style>

@@ -154,19 +154,19 @@ onMounted(loadPost);
 
 .article-panel,
 .comment-panel {
-  padding: 30px;
+  padding: 34px;
 }
 
 .article-panel {
   background:
-    radial-gradient(circle at top center, rgba(255, 255, 255, 0.06), transparent 24%),
-    rgba(10, 10, 10, 0.94);
+    radial-gradient(circle at top center, rgba(220, 193, 136, 0.16), transparent 26%),
+    rgba(21, 18, 14, 0.95);
 }
 
 .article-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 26px;
   align-items: start;
 }
 
@@ -177,15 +177,14 @@ onMounted(loadPost);
 .eyebrow,
 .comment-kicker {
   margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   font-size: 0.78rem;
 }
 
 h1 {
   margin: 12px 0 16px;
   font-size: clamp(2.3rem, 4.8vw, 4.1rem);
-  line-height: 0.95;
+  line-height: 1;
   letter-spacing: -0.05em;
 }
 
@@ -198,17 +197,17 @@ h1 {
 }
 
 .article-overview {
-  padding: 18px;
+  padding: 20px;
   border-radius: 24px;
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .overview-item {
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  background: rgba(255, 248, 233, 0.05);
 }
 
 .overview-item strong {
@@ -229,7 +228,7 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
-  margin: 20px 0 14px;
+  margin: 22px 0 16px;
   font-size: 0.86rem;
 }
 
@@ -238,12 +237,12 @@ h1 {
 }
 
 .article-body-wrap {
-  padding: 24px 0 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 28px 0 8px;
+  border-top: 1px solid var(--line);
 }
 
 .article-body {
-  max-width: 840px;
+  max-width: 860px;
 }
 
 .comment-heading h2 {
@@ -251,14 +250,14 @@ h1 {
 }
 
 .comment-form {
-  margin: 18px 0 28px;
-  padding: 22px;
+  margin: 20px 0 30px;
+  padding: 24px;
   border-radius: 24px;
   border: 1px solid var(--line);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
-    rgba(8, 8, 8, 0.96);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    linear-gradient(180deg, rgba(255, 248, 233, 0.05), rgba(255, 248, 233, 0.02)),
+    rgba(23, 20, 16, 0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 233, 0.04);
 }
 
 .comment-form-head {
@@ -300,7 +299,7 @@ h1 {
   padding: 18px 20px;
   border-radius: 22px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 248, 233, 0.04);
 }
 
 .comment-item p {

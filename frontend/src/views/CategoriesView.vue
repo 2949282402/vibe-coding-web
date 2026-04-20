@@ -77,11 +77,11 @@ onMounted(loadData);
 }
 
 .panel {
-  padding: 28px;
+  padding: 32px;
 }
 
 .taxonomy-head {
-  margin-bottom: 18px;
+  margin-bottom: 22px;
 }
 
 .taxonomy-kicker {
@@ -108,17 +108,17 @@ onMounted(loadData);
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 20px;
+  padding: 20px 22px;
   border-radius: 22px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 248, 233, 0.035);
   transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
 .taxonomy-item:hover {
   transform: translateY(-2px);
   border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(255, 248, 233, 0.06);
 }
 
 .taxonomy-copy {
@@ -144,6 +144,7 @@ onMounted(loadData);
   border: 1px solid var(--line);
   color: var(--text-secondary);
   font-size: 0.8rem;
+  background: var(--accent-soft);
 }
 
 .tag-cloud {
