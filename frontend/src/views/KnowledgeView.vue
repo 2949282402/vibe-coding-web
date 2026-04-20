@@ -122,7 +122,7 @@ const copy = computed(() => {
       assistantRole: '助手',
       emptyStateTitle: '开始一次新的知识问答',
       emptyStateBody: '输入问题后，系统会先检索相关文章片段，再生成带引用的回答。',
-      composerHint: 'Enter 换行，Ctrl + Enter 发送',
+      composerHint: 'Enter 发送，Ctrl + Enter 换行',
       searchModeTitle: '检索范围',
       searchModeLocal: '仅站内',
       searchModeHybrid: '站内 + 联网',
@@ -192,7 +192,7 @@ const copy = computed(() => {
     assistantRole: 'Assistant',
     emptyStateTitle: 'Start a grounded knowledge conversation',
     emptyStateBody: 'Ask a question and the system will retrieve relevant post chunks before answering with citations.',
-    composerHint: 'Enter for newline, Ctrl + Enter to send',
+    composerHint: 'Press Enter to send, Ctrl + Enter for newline',
     searchModeTitle: 'Search Scope',
     searchModeLocal: 'Local Only',
     searchModeHybrid: 'Local + Web',
@@ -410,6 +410,10 @@ const assistantMessagesWithSources = computed(() =>
   )
 );
 
+const latestAssistantTimelineMessageId = computed(
+  () => [...timelineMessages.value].reverse().find((message) => message.role === 'assistant' && !message.skeleton)?.id || null
+);
+
 const latestSourceMessageId = computed(() => assistantMessagesWithSources.value.at(-1)?.id || null);
 
 const activeSourceMessage = computed(() => {
@@ -512,6 +516,16 @@ function sourceMetaLabel(source) {
   return source.slug || copy.value.blogSourceLabel;
 }
 
+function shouldShowInlineFollowUps(message) {
+  return (
+    message?.role === 'assistant' &&
+    !message.pending &&
+    !message.skeleton &&
+    latestFollowUps.value.length > 0 &&
+    message.id === latestAssistantTimelineMessageId.value
+  );
+}
+
 function setActiveSourceMessage(messageId) {
   if (!messageId) {
     return;
@@ -547,6 +561,15 @@ async function jumpToCitationSource(messageId, citationIndex) {
   if (target) {
     target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+}
+
+function handleComposerKeydown(event) {
+  if (event.key !== 'Enter' || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+    return;
+  }
+
+  event.preventDefault();
+  submitQuestion();
 }
 
 function persistActiveSession() {
@@ -892,21 +915,17 @@ async function runStreamRequest(normalizedQuestion) {
 }
 
 async function submitQuestion(presetQuestion = '') {
-  if (presetQuestion) {
-    question.value = presetQuestion;
-  }
-
-  const normalizedQuestion = question.value.trim();
+  const normalizedQuestion = String(presetQuestion || question.value).trim();
   if (!normalizedQuestion) {
     return;
   }
 
   stopStreaming();
   closeSidebar();
+  question.value = '';
 
   try {
     await runStreamRequest(normalizedQuestion);
-    question.value = '';
   } catch (error) {
     if (error?.name === 'AbortError') {
       return;
@@ -921,12 +940,12 @@ async function submitQuestion(presetQuestion = '') {
         searchMode: searchMode.value
       });
       applyResponse(res.data, { clearPending: true });
-      question.value = '';
       await loadSessions();
       ElMessage.warning(error?.message || copy.value.fallbackWarning);
       await scrollConversationToBottom(true);
     } catch (fallbackError) {
       clearPendingTurn();
+      question.value = normalizedQuestion;
       ElMessage.error(fallbackError?.message || error?.message || 'Request failed');
     } finally {
       loading.value = false;
@@ -1349,12 +1368,29 @@ onBeforeUnmount(() => {
                 <span class="placeholder-line short"></span>
               </div>
 
-              <div
-                v-else-if="message.role === 'assistant'"
-                class="chat-bubble assistant-bubble content-html markdown-body"
-                :class="{ pending: message.pending }"
-                v-html="message.renderedContent"
-              ></div>
+              <template v-else-if="message.role === 'assistant'">
+                <div
+                  class="chat-bubble assistant-bubble content-html markdown-body"
+                  :class="{ pending: message.pending }"
+                  v-html="message.renderedContent"
+                ></div>
+
+                <div v-if="shouldShowInlineFollowUps(message)" class="inline-followups">
+                  <span class="inline-followups-label muted">{{ copy.followUpsTitle }}</span>
+                  <div class="prompt-list inline-followups-list">
+                    <button
+                      v-for="item in latestFollowUps"
+                      :key="`${message.id}-${item}`"
+                      type="button"
+                      class="prompt-chip"
+                      :disabled="loading"
+                      @click="submitQuestion(item)"
+                    >
+                      {{ item }}
+                    </button>
+                  </div>
+                </div>
+              </template>
 
               <div v-else class="chat-bubble user-bubble" :class="{ pending: message.pending }">
                 {{ message.content }}
@@ -1424,7 +1460,7 @@ onBeforeUnmount(() => {
             :rows="4"
             :placeholder="copy.placeholder"
             :disabled="loading"
-            @keyup.ctrl.enter="submitQuestion()"
+            @keydown="handleComposerKeydown"
           />
 
           <div class="composer-foot">
@@ -1444,7 +1480,7 @@ onBeforeUnmount(() => {
     </main>
 
     <aside class="context-rail">
-      <section class="section-card context-panel">
+      <section class="section-card context-panel sources-panel">
         <div class="section-heading compact-heading">
           <h2>{{ copy.sourcesTitle }}</h2>
         </div>
@@ -1535,25 +1571,6 @@ onBeforeUnmount(() => {
 
       <section class="section-card context-panel">
         <div class="section-heading compact-heading">
-          <h2>{{ copy.followUpsTitle }}</h2>
-        </div>
-        <div v-if="latestFollowUps.length" class="prompt-list stacked">
-          <button
-            v-for="item in latestFollowUps"
-            :key="item"
-            type="button"
-            class="prompt-chip prompt-chip-block"
-            :disabled="loading"
-            @click="submitQuestion(item)"
-          >
-            {{ item }}
-          </button>
-        </div>
-        <p v-else class="muted rail-empty">{{ copy.noFollowUps }}</p>
-      </section>
-
-      <section class="section-card context-panel">
-        <div class="section-heading compact-heading">
           <h2>{{ copy.threadMapTitle }}</h2>
         </div>
         <div v-if="threadMap.length" class="thread-map">
@@ -1579,6 +1596,8 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   min-height: calc(100vh - 122px);
+  height: calc(100vh - 122px);
+  max-height: calc(100vh - 122px);
   margin: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 300px;
@@ -1608,6 +1627,8 @@ onBeforeUnmount(() => {
 .knowledge-sidebar {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  max-height: 100%;
   padding: 14px;
   overflow: hidden;
   border-radius: 28px;
@@ -2023,6 +2044,23 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.inline-followups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.inline-followups-label {
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.inline-followups-list {
+  gap: 10px;
+}
+
 .bubble-meta {
   display: flex;
   align-items: center;
@@ -2414,14 +2452,23 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
+  overflow: hidden;
+}
+
+.sources-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .context-panel {
   padding: 16px;
   border-radius: 24px;
+  overflow: hidden;
 }
 
 .rail-hint,
@@ -2445,6 +2492,18 @@ onBeforeUnmount(() => {
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.025);
+}
+
+.source-groups {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.thread-map {
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .source-group.is-blog {
@@ -2709,6 +2768,8 @@ html[data-theme='light'] .source-group.is-web {
   .knowledge-shell {
     grid-template-columns: 320px minmax(0, 1fr) 320px;
     min-height: calc(100vh - 126px);
+    height: calc(100vh - 126px);
+    max-height: calc(100vh - 126px);
   }
 
   .knowledge-shell.sidebar-collapsed {
@@ -2757,6 +2818,8 @@ html[data-theme='light'] .source-group.is-web {
   .knowledge-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
     min-height: calc(100vh - 108px);
+    height: auto;
+    max-height: none;
   }
 
   .knowledge-sidebar {
@@ -2778,7 +2841,8 @@ html[data-theme='light'] .source-group.is-web {
   .context-rail {
     grid-template-columns: 1fr;
     overflow: visible;
-    padding-right: 0;
+    height: auto;
+    max-height: none;
   }
 
   .chat-stage {
@@ -2791,6 +2855,8 @@ html[data-theme='light'] .source-group.is-web {
   .knowledge-shell {
     gap: 10px;
     min-height: calc(100vh - 88px);
+    height: auto;
+    max-height: none;
   }
 
   .knowledge-sidebar {
@@ -2890,6 +2956,8 @@ html[data-theme='light'] .source-group.is-web {
 @media (max-width: 420px) {
   .knowledge-shell {
     min-height: calc(100vh - 76px);
+    height: auto;
+    max-height: none;
   }
 
   .chat-stage-head {
