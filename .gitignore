@@ -6,6 +6,8 @@ target/
 .vscode/
 *.iml
 *.log
+logs/*
+!logs/.gitkeep
 .DS_Store
 frontend/.env.local
 backend/.mvn/

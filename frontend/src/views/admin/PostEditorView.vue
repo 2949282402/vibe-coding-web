@@ -571,8 +571,8 @@ onMounted(loadDetail);
 .editor-page {
   max-width: 1520px;
   margin: 0 auto;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  overflow: visible;
 }
 
 .editor-stack {
@@ -581,7 +581,7 @@ onMounted(loadDetail);
   gap: 20px;
   min-height: 0;
   flex: 1 1 auto;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .editor-card {
@@ -592,7 +592,7 @@ onMounted(loadDetail);
 
 .content-card {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(72vh, 900px);
   overflow: hidden;
 }
 

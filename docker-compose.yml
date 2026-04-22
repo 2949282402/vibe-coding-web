@@ -3,6 +3,9 @@ services:
     image: mysql:8.4.7
     container_name: hejulian-blog-mysql
     restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-hejulian_blog}
       MYSQL_USER: ${MYSQL_USER:-hejulian_blog}
@@ -10,13 +13,15 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_change_me}
       TZ: Asia/Shanghai
     command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_0900_ai_ci
+      - 'LOG_DATE="$$(date +%F)"; LOG_DIR="/logs/$${LOG_DATE}"; mkdir -p "$${LOG_DIR}"; touch "$${LOG_DIR}/mysql.txt"; exec docker-entrypoint.sh mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-128M} --max-connections=${MYSQL_MAX_CONNECTIONS:-40} --table-open-cache=${MYSQL_TABLE_OPEN_CACHE:-128} >> "$${LOG_DIR}/mysql.txt" 2>&1'
     ports:
-      - "${MYSQL_PORT:-13306}:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./sql/blog_mysql_init.sql:/docker-entrypoint-initdb.d/01-blog.sql:ro
+      - ./logs:/logs
+    mem_limit: ${MYSQL_MEM_LIMIT:-384m}
+    cpus: ${MYSQL_CPUS:-0.40}
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
@@ -27,11 +32,18 @@ services:
     image: redis:7.4-alpine
     container_name: hejulian-blog-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - 'LOG_DATE="$$(date +%F)"; LOG_DIR="/logs/$${LOG_DATE}"; mkdir -p "$${LOG_DIR}"; touch "$${LOG_DIR}/redis.txt"; exec docker-entrypoint.sh redis-server --appendonly ${REDIS_APPENDONLY:-yes} --maxmemory ${REDIS_MAXMEMORY:-128mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru} >> "$${LOG_DIR}/redis.txt" 2>&1'
     ports:
-      - "${REDIS_PORT:-16379}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
+      - ./logs:/logs
+    mem_limit: ${REDIS_MEM_LIMIT:-192m}
+    cpus: ${REDIS_CPUS:-0.20}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -42,11 +54,24 @@ services:
     image: qdrant/qdrant:v1.17.0
     container_name: hejulian-blog-qdrant
     restart: unless-stopped
+    working_dir: /qdrant
+    entrypoint:
+      - /bin/sh
+      - -c
+    environment:
+      QDRANT__SERVICE__MAX_WORKERS: ${QDRANT_MAX_WORKERS:-1}
+      QDRANT__STORAGE__ON_DISK_PAYLOAD: ${QDRANT_ON_DISK_PAYLOAD:-true}
+      QDRANT__STORAGE__HNSW_INDEX__ON_DISK: ${QDRANT_HNSW_ON_DISK:-true}
+    command:
+      - 'LOG_DATE="$$(date +%F)"; LOG_DIR="/logs/$${LOG_DATE}"; mkdir -p "$${LOG_DIR}"; touch "$${LOG_DIR}/qdrant.txt"; exec ./entrypoint.sh >> "$${LOG_DIR}/qdrant.txt" 2>&1'
     ports:
-      - "${QDRANT_PORT:-16333}:6333"
+      - "${QDRANT_PORT:-6333}:6333"
       - "${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant-data:/qdrant/storage
+      - ./logs:/logs
+    mem_limit: ${QDRANT_MEM_LIMIT:-320m}
+    cpus: ${QDRANT_CPUS:-0.35}
 
   llm-bridge:
     profiles: ["llm-bridge"]
@@ -56,6 +81,7 @@ services:
     container_name: hejulian-blog-llm-bridge
     restart: unless-stopped
     environment:
+      BLOG_LOG_ROOT: /logs
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${BLOG_RAG_MODEL:-qwen3.5:4b}
       OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-600}
@@ -63,11 +89,15 @@ services:
       TZ: Asia/Shanghai
     ports:
       - "${LLM_BRIDGE_PORT:-8090}:8090"
+    volumes:
+      - ./logs:/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).read()"]
       interval: 15s
       timeout: 5s
       retries: 8
+    mem_limit: ${LLM_BRIDGE_MEM_LIMIT:-160m}
+    cpus: ${LLM_BRIDGE_CPUS:-0.15}
 
   backend:
     build:
@@ -76,6 +106,8 @@ services:
     container_name: hejulian-blog-backend
     restart: unless-stopped
     environment:
+      BLOG_LOG_ROOT: /logs
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=62 -XX:InitialRAMPercentage=20 -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError}
       BLOG_DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hejulian_blog}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       BLOG_DB_USERNAME: ${MYSQL_USER:-hejulian_blog}
       BLOG_DB_PASSWORD: ${MYSQL_PASSWORD:-change_me}
@@ -122,9 +154,12 @@ services:
       qdrant:
         condition: service_started
     ports:
-      - "${BACKEND_PORT:-18080}:8080"
+      - "${BACKEND_PORT:-8080}:8080"
     volumes:
       - backend-uploads:/app/uploads
+      - ./logs:/logs
+    mem_limit: ${BACKEND_MEM_LIMIT:-700m}
+    cpus: ${BACKEND_CPUS:-0.70}
 
   frontend:
     build:
@@ -132,10 +167,16 @@ services:
       dockerfile: Dockerfile
     container_name: hejulian-blog-frontend
     restart: unless-stopped
+    environment:
+      BLOG_LOG_ROOT: /logs
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_PORT:-180}:80"
+      - "${FRONTEND_PORT:-80}:80"
+    volumes:
+      - ./logs:/logs
+    mem_limit: ${FRONTEND_MEM_LIMIT:-96m}
+    cpus: ${FRONTEND_CPUS:-0.15}
 
 volumes:
   mysql-data:

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import urllib.error
 import urllib.request
@@ -10,6 +11,18 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip(
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b").strip() or "qwen3.5:4b"
 DEFAULT_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "600"))
 SERVER_PORT = int(os.getenv("PORT", "8090"))
+LOG_FILE = os.getenv("BRIDGE_LOG_FILE", "/logs/llm-bridge.txt")
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+    ],
+)
+LOGGER = logging.getLogger("llm-bridge")
 
 
 def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict) -> None:
@@ -115,6 +128,7 @@ def call_ollama_generate(payload: dict) -> dict:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             response_body = response.read().decode("utf-8")
             data = json.loads(response_body or "{}")
+            LOGGER.info("generate ok model=%s done=%s", model, bool(data.get("done", False)))
             return {
                 "model": model,
                 "content": str(data.get("response", "") or "").strip(),
@@ -124,8 +138,10 @@ def call_ollama_generate(payload: dict) -> dict:
             }
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
+        LOGGER.exception("generate http error model=%s code=%s", model, exc.code)
         raise RuntimeError(f"Ollama HTTP {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
+        LOGGER.exception("generate connection error model=%s", model)
         raise RuntimeError(f"Ollama connection failed: {exc.reason}") from exc
 
 
@@ -184,6 +200,7 @@ def stream_ollama_generate(handler: BaseHTTPRequestHandler, payload: dict) -> No
                     )
 
                 if data.get("done"):
+                    LOGGER.info("stream ok model=%s done=true", model)
                     stream_json_line(
                         handler,
                         {
@@ -208,8 +225,10 @@ def stream_ollama_generate(handler: BaseHTTPRequestHandler, payload: dict) -> No
             )
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
+        LOGGER.exception("stream http error model=%s code=%s", model, exc.code)
         raise RuntimeError(f"Ollama HTTP {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
+        LOGGER.exception("stream connection error model=%s", model)
         raise RuntimeError(f"Ollama connection failed: {exc.reason}") from exc
 
 
@@ -218,6 +237,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
+            LOGGER.info("health check")
             json_response(
                 self,
                 HTTPStatus.OK,
@@ -237,6 +257,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         try:
             payload = read_json(self)
+            LOGGER.info("request path=%s model=%s", self.path, str(payload.get("model", "") or DEFAULT_MODEL).strip() or DEFAULT_MODEL)
             if self.path == "/generate/stream":
                 stream_ollama_generate(self, payload)
                 return
@@ -253,8 +274,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 return
             json_response(self, HTTPStatus.OK, result)
         except ValueError as exc:
+            LOGGER.warning("bad request path=%s error=%s", self.path, exc)
             json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except Exception as exc:  # noqa: BLE001
+            LOGGER.exception("request failed path=%s", self.path)
             json_response(self, HTTPStatus.BAD_GATEWAY, {"error": str(exc), "source": "ollama-native-generate"})
 
     def log_message(self, format: str, *args) -> None:
@@ -263,5 +286,5 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("0.0.0.0", SERVER_PORT), BridgeHandler)
-    print(f"LLM bridge listening on 0.0.0.0:{SERVER_PORT}, Ollama={OLLAMA_BASE_URL}, model={DEFAULT_MODEL}")
+    LOGGER.info("LLM bridge listening on 0.0.0.0:%s, Ollama=%s, model=%s", SERVER_PORT, OLLAMA_BASE_URL, DEFAULT_MODEL)
     server.serve_forever()

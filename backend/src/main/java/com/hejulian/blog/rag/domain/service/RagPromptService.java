@@ -54,18 +54,18 @@ public class RagPromptService {
         if (textProcessor.containsChinese(question)) {
             return """
                     \u4f60\u662f\u4e2a\u4eba\u5de5\u7a0b\u535a\u5ba2\u7684\u68c0\u7d22\u589e\u5f3a\u52a9\u624b\u3002
-                    \u4f60\u53ea\u80fd\u4f9d\u636e\u7ed9\u5b9a\u8bc1\u636e\u56de\u7b54\u95ee\u9898\uff0c\u4e0d\u8981\u8865\u5145\u672a\u88ab\u8bc1\u636e\u652f\u6301\u7684\u4e8b\u5b9e\u3002
+                    \u4f60\u53ea\u80fd\u4f9d\u636e\u7ed9\u5b9a\u7684\u53c2\u8003\u8d44\u6599\u548c\u7528\u6237\u95ee\u9898\u56de\u7b54\uff0c\u4e0d\u8981\u8865\u5145\u4efb\u4f55\u672a\u88ab\u53c2\u8003\u8d44\u6599\u76f4\u63a5\u652f\u6301\u7684\u4e8b\u5b9e\u3001\u63a8\u65ad\u3001\u5e38\u8bc6\u6216\u5ef6\u4f38\u7ed3\u8bba\u3002
+                    \u5982\u679c\u53c2\u8003\u8d44\u6599\u4e3a\u7a7a\uff0c\u6216\u8005\u53c2\u8003\u8d44\u6599\u4e0e\u7528\u6237\u95ee\u9898\u4e0d\u76f8\u5173\uff0c\u5fc5\u987b\u53ea\u56de\u590d\u201c\u6682\u65f6\u6ca1\u6709\u53c2\u8003\u8d44\u6599\u201d\u3002
                     \u6bcf\u4e00\u6bb5\u4e8b\u5b9e\u6027\u9648\u8ff0\u90fd\u5fc5\u987b\u5e26\u4e0a\u5f15\u7528\u6807\u8bb0\uff0c\u4f8b\u5982 [1]\u3001[2]\uff0c\u4e14\u53ea\u80fd\u5f15\u7528\u5df2\u63d0\u4f9b\u7684\u7f16\u53f7\u3002
-                    \u5982\u679c\u8bc1\u636e\u4e0d\u8db3\uff0c\u8bf7\u660e\u786e\u8bf4\u660e\u201c\u73b0\u6709\u8bc1\u636e\u4e0d\u8db3\u201d\uff0c\u5e76\u7ee7\u7eed\u4fdd\u6301\u6240\u6709\u5df2\u9648\u8ff0\u4e8b\u5b9e\u90fd\u6709\u5f15\u7528\u3002
-                    \u4e0d\u8981\u7f16\u9020\u6765\u6e90\uff0c\u4e0d\u8981\u8f93\u51fa\u6ca1\u6709\u5f15\u7528\u652f\u6491\u7684\u7ed3\u8bba\u3002
+                    \u4e0d\u8981\u7f16\u9020\u6765\u6e90\uff0c\u4e0d\u8981\u8f93\u51fa\u6ca1\u6709\u5f15\u7528\u652f\u6491\u7684\u7ed3\u8bba\uff0c\u4e0d\u8981\u6839\u636e\u8bad\u7ec3\u77e5\u8bc6\u81ea\u884c\u8865\u5168\u7b54\u6848\u3002
                     """;
         }
         return """
                 You are a retrieval-augmented assistant for a personal engineering blog.
-                Answer only from the supplied evidence.
+                Answer only from the supplied references and the user's question.
+                If the references are empty or unrelated to the user's question, reply only with "No reference materials are available at the moment."
                 Every factual paragraph must contain citation markers in the form [1], [2], and you may only cite the provided context ids.
-                Do not produce uncited factual claims or unsupported citation numbers.
-                If the evidence is insufficient, say so explicitly and keep all supported statements cited.
+                Do not produce uncited factual claims, unsupported citation numbers, or knowledge from outside the provided references.
                 """;
     }
 
@@ -73,18 +73,20 @@ public class RagPromptService {
         if (textProcessor.containsChinese(question)) {
             return """
                     \u4f60\u662f\u4e2a\u4eba\u5de5\u7a0b\u535a\u5ba2\u7684\u68c0\u7d22\u589e\u5f3a\u52a9\u624b\u3002
-                    \u8bf7\u4f18\u5148\u53c2\u8003\u6211\u63d0\u4f9b\u7684\u7ad9\u5185\u77e5\u8bc6\u7247\u6bb5\uff0c\u518d\u7ed3\u5408\u5b98\u65b9\u8054\u7f51\u641c\u7d22\u8865\u5145\u6700\u65b0\u7684\u516c\u5f00\u4fe1\u606f\u3002
-                    \u5982\u679c\u7ad9\u5185\u5185\u5bb9\u4e0e\u8054\u7f51\u4fe1\u606f\u5b58\u5728\u65f6\u95f4\u5dee\u5f02\uff0c\u8bf7\u660e\u786e\u6307\u51fa\u65f6\u95f4\u8303\u56f4\uff0c\u4e0d\u8981\u6df7\u6dc6\u3002
-                    \u5bf9\u7ad9\u5185\u8bc1\u636e\u652f\u6301\u7684\u5185\u5bb9\uff0c\u5c3d\u91cf\u4fdd\u7559 [1]\u3001[2] \u8fd9\u6837\u7684\u5f15\u7528\u6807\u8bb0\u3002
-                    \u8054\u7f51\u8865\u5145\u90e8\u5206\u4e0d\u8981\u7f16\u9020\u6765\u6e90\uff0c\u4e0d\u786e\u5b9a\u65f6\u8bf7\u76f4\u63a5\u8bf4\u660e\u3002
+                    \u8bf7\u4e25\u683c\u4f9d\u636e\u6211\u63d0\u4f9b\u7684\u53c2\u8003\u8d44\u6599\u548c\u7528\u6237\u95ee\u9898\u4f5c\u7b54\u3002
+                    \u53ef\u4ee5\u53c2\u8003\u7ad9\u5185\u77e5\u8bc6\u7247\u6bb5\uff0c\u4e5f\u53ef\u4ee5\u53c2\u8003\u8054\u7f51\u641c\u7d22\u7ed3\u679c\uff0c\u4f46\u90fd\u5fc5\u987b\u4e0e\u7528\u6237\u95ee\u9898\u76f4\u63a5\u76f8\u5173\u3002
+                    \u5982\u679c\u53c2\u8003\u8d44\u6599\u4e3a\u7a7a\uff0c\u6216\u8005\u53c2\u8003\u8d44\u6599\u4e0e\u7528\u6237\u95ee\u9898\u4e0d\u76f8\u5173\uff0c\u5fc5\u987b\u53ea\u56de\u590d\u201c\u6682\u65f6\u6ca1\u6709\u53c2\u8003\u8d44\u6599\u201d\u3002
+                    \u5bf9\u53c2\u8003\u8d44\u6599\u652f\u6301\u7684\u5185\u5bb9\uff0c\u5fc5\u987b\u4fdd\u7559\u6216\u8865\u5145 [1]\u3001[2] \u8fd9\u6837\u7684\u5f15\u7528\u6807\u8bb0\u3002
+                    \u4e0d\u8981\u7f16\u9020\u6765\u6e90\uff0c\u4e0d\u8981\u8f93\u51fa\u6ca1\u6709\u5f15\u7528\u652f\u6491\u7684\u7ed3\u8bba\uff0c\u4e0d\u8981\u6839\u636e\u8bad\u7ec3\u77e5\u8bc6\u81ea\u884c\u8865\u5168\u7b54\u6848\u3002
                     """;
         }
         return """
                 You are a retrieval-augmented assistant for a personal engineering blog.
-                Prioritize the provided local blog evidence, then use official web search to supplement newer public information.
-                If local evidence and web information differ because of timing, make the timeline explicit instead of blending them.
-                Preserve local citations like [1] and [2] whenever the statement is supported by local evidence.
-                Do not invent web facts or sources.
+                Answer strictly from the provided references and the user's question.
+                You may use local evidence and web search results, but only when they are directly relevant to the user's question.
+                If the references are empty or unrelated to the user's question, reply only with "No reference materials are available at the moment."
+                Preserve citations like [1] and [2] whenever a statement is supported by the provided references.
+                Do not invent facts, sources, or unsupported conclusions.
                 """;
     }
 
@@ -124,14 +126,16 @@ public class RagPromptService {
         builder.append(chinese ? "\u8f93\u51fa\u8981\u6c42\uff1a\n" : "Output requirement:\n");
         if (chinese) {
             builder.append("- \u53ea\u80fd\u4f7f\u7528\u4e0a\u9762\u7684\u8bc1\u636e\u56de\u7b54\u3002\n")
+                    .append("- \u5fc5\u987b\u5148\u5224\u65ad\u53c2\u8003\u8d44\u6599\u662f\u5426\u80fd\u76f4\u63a5\u56de\u7b54\u7528\u6237\u95ee\u9898\uff1b\u5982\u679c\u4e0d\u80fd\u76f4\u63a5\u56de\u7b54\uff0c\u6216\u53c2\u8003\u8d44\u6599\u4e0d\u76f8\u5173\uff0c\u53ea\u56de\u590d\u201c\u6682\u65f6\u6ca1\u6709\u53c2\u8003\u8d44\u6599\u201d\u3002\n")
                     .append("- \u6bcf\u4e00\u6bb5\u4e8b\u5b9e\u6027\u5185\u5bb9\u90fd\u5fc5\u987b\u5305\u542b [1] \u6216 [1][2] \u8fd9\u6837\u7684\u5f15\u7528\u3002\n")
                     .append("- \u4e0d\u8981\u5f15\u7528\u672a\u51fa\u73b0\u8fc7\u7684\u7f16\u53f7\u3002\n")
-                    .append("- \u5982\u679c\u7ad9\u5185\u8bc1\u636e\u548c\u8054\u7f51\u7ed3\u679c\u90fd\u4e0d\u8db3\uff0c\u8bf7\u76f4\u63a5\u8bf4\u660e\u8bc1\u636e\u4e0d\u8db3\u3002\n");
+                    .append("- \u4e0d\u8981\u4f7f\u7528\u53c2\u8003\u8d44\u6599\u4e4b\u5916\u7684\u5e38\u8bc6\u3001\u7ecf\u9a8c\u6216\u8bad\u7ec3\u77e5\u8bc6\u8865\u5145\u7b54\u6848\u3002\n");
         } else {
             builder.append("- Use only the evidence above.\n")
+                    .append("- First judge whether the references directly answer the user's question; if not, reply only with \"No reference materials are available at the moment.\"\n")
                     .append("- Every factual paragraph must include citations like [1] or [1][2].\n")
                     .append("- Do not mention any citation id that is not listed above.\n")
-                    .append("- If the local and web evidence are both insufficient, say so explicitly.\n");
+                    .append("- Do not supplement the answer with knowledge outside the provided references.\n");
         }
         return builder.toString();
     }
@@ -175,19 +179,19 @@ public class RagPromptService {
 
         if (chinese) {
             builder.append("""
-                    ?????
-                    - ??????????????????
-                    - ???????????????????????? [1]?[2] ???
-                    - ????????????????????????
-                    - ????????????????
+                    \u8f93\u51fa\u8981\u6c42\uff1a
+                    - \u5fc5\u987b\u4e25\u683c\u4f9d\u636e\u53c2\u8003\u8d44\u6599\u548c\u7528\u6237\u95ee\u9898\u56de\u7b54\u3002
+                    - \u5fc5\u987b\u5148\u5224\u65ad\u8fd9\u4e9b\u53c2\u8003\u8d44\u6599\u662f\u5426\u4e0e\u7528\u6237\u95ee\u9898\u76f4\u63a5\u76f8\u5173\uff1b\u5982\u679c\u4e0d\u76f8\u5173\uff0c\u6216\u8005\u6ca1\u6709\u53ef\u7528\u53c2\u8003\u8d44\u6599\uff0c\u53ea\u56de\u590d\u201c\u6682\u65f6\u6ca1\u6709\u53c2\u8003\u8d44\u6599\u201d\u3002
+                    - \u5bf9\u4e8e\u53ef\u88ab\u53c2\u8003\u8d44\u6599\u652f\u6301\u7684\u5185\u5bb9\uff0c\u5fc5\u987b\u4fdd\u7559\u6216\u8865\u5145 [1]\u3001[2] \u8fd9\u6837\u7684\u5f15\u7528\u6807\u8bb0\u3002
+                    - \u4e0d\u8981\u7f16\u9020\u6765\u6e90\uff0c\u4e0d\u8981\u8865\u5145\u53c2\u8003\u8d44\u6599\u4e4b\u5916\u7684\u4e8b\u5b9e\uff0c\u4e0d\u8981\u8f93\u51fa\u65e0\u5f15\u7528\u7ed3\u8bba\u3002
                     """);
         } else {
             builder.append("""
                     Output requirement:
-                    - Answer the core question first, then add only the needed context.
-                    - Keep local citations like [1] and [2] for claims directly supported by local evidence.
-                    - Use web search only to supplement newer public information; do not fabricate sources.
-                    - If web search is still insufficient, say so clearly.
+                    - Answer strictly from the provided references and the user's question.
+                    - First judge whether the references are directly relevant; if not, reply only with "No reference materials are available at the moment."
+                    - Keep citations like [1] and [2] for claims directly supported by the provided references.
+                    - Do not fabricate sources or add facts beyond the provided references.
                     """);
         }
         return builder.toString().trim();
@@ -231,16 +235,16 @@ public class RagPromptService {
 
     public String localizedNoDataAnswer(String question) {
         if (textProcessor.containsChinese(question)) {
-            return "\u5f53\u524d\u77e5\u8bc6\u5e93\u91cc\u8fd8\u6ca1\u6709\u53ef\u7528\u4e8e\u5f15\u7528\u56de\u7b54\u7684\u5df2\u53d1\u5e03\u6587\u7ae0\uff0c\u56e0\u6b64\u6682\u65f6\u65e0\u6cd5\u751f\u6210\u5e26\u5f15\u7528\u7684 RAG \u56de\u7b54\u3002";
+            return "\u6682\u65f6\u6ca1\u6709\u53c2\u8003\u8d44\u6599";
         }
-        return "The knowledge base does not contain any published posts yet, so no cited RAG answer can be generated.";
+        return "No reference materials are available at the moment.";
     }
 
     public String localizedNoMatchAnswer(String question) {
         if (textProcessor.containsChinese(question)) {
-            return "\u6211\u6682\u65f6\u6ca1\u6709\u5728\u5f53\u524d\u77e5\u8bc6\u5e93\u6216\u8054\u7f51\u7ed3\u679c\u91cc\u627e\u5230\u8db3\u591f\u76f8\u5173\u7684\u8bc1\u636e\u3002\u4f60\u53ef\u4ee5\u6362\u4e00\u4e2a\u66f4\u5177\u4f53\u7684\u95ee\u9898\uff0c\u6216\u8005\u8865\u5145\u66f4\u591a\u76f8\u5173\u5185\u5bb9\u3002";
+            return "\u6682\u65f6\u6ca1\u6709\u53c2\u8003\u8d44\u6599";
         }
-        return "I could not find enough relevant evidence in the current knowledge base or web results. Try a more specific query or add more related content.";
+        return "No reference materials are available at the moment.";
     }
 
     private String summarizeEvidence(RagEvidence evidence) {

@@ -67,6 +67,9 @@ const qwenConfig = ref({
 });
 const qwenApiKeyInput = ref('');
 const qwenApiKeyEditorVisible = ref(false);
+const contextRailCollapsed = ref(false);
+const chatStageRef = ref(null);
+const isChatStageFullscreen = ref(false);
 
 let activeController = null;
 
@@ -491,6 +494,27 @@ const qwenCopy = computed(() =>
         cancelEditApiKey: 'Cancel'
       }
 );
+const uiCopy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        composerSubmitHint: 'Enter 发送',
+        composerNewlineHint: 'Ctrl + Enter 换行',
+        fullscreenEnter: '全屏聊天',
+        fullscreenExit: '退出全屏',
+        sourcesCollapse: '收起参考栏',
+        sourcesExpand: '展开参考栏',
+        configToolsOpen: '展开模型设置'
+      }
+    : {
+        composerSubmitHint: 'Enter to send',
+        composerNewlineHint: 'Ctrl + Enter for newline',
+        fullscreenEnter: 'Enter fullscreen',
+        fullscreenExit: 'Exit fullscreen',
+        sourcesCollapse: 'Collapse sources',
+        sourcesExpand: 'Expand sources',
+        configToolsOpen: 'Open model settings'
+      }
+);
 const hasQwenConfig = computed(() => Boolean(qwenConfig.value.hasApiKey && qwenConfig.value.selectedModel));
 const hasConversation = computed(
   () => history.value.length > 0 || Boolean(pendingTurn.value?.question) || streaming.value || Boolean(result.value?.answer)
@@ -498,7 +522,9 @@ const hasConversation = computed(
 const sidebarExpanded = computed(() => (drawerMode.value ? sidebarDrawerOpen.value : !sidebarCollapsed.value));
 const shellClasses = computed(() => ({
   'sidebar-collapsed': !drawerMode.value && sidebarCollapsed.value,
-  'sidebar-open': drawerMode.value && sidebarDrawerOpen.value
+  'sidebar-open': drawerMode.value && sidebarDrawerOpen.value,
+  'context-rail-collapsed': contextRailCollapsed.value,
+  'stage-fullscreen': isChatStageFullscreen.value
 }));
 
 const draftAssistantMessage = computed(() => {
@@ -1254,6 +1280,26 @@ function hideQwenApiKeyEditor() {
   qwenApiKeyInput.value = '';
 }
 
+function toggleContextRail() {
+  contextRailCollapsed.value = !contextRailCollapsed.value;
+}
+
+async function toggleChatStageFullscreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    await chatStageRef.value?.requestFullscreen?.();
+  } catch (error) {
+    ElMessage.error(error?.message || 'Fullscreen unavailable');
+  }
+}
+
+function syncFullscreenState() {
+  isChatStageFullscreen.value = Boolean(document.fullscreenElement && chatStageRef.value && document.fullscreenElement === chatStageRef.value);
+}
+
 function createEmptyResult(normalizedQuestion) {
   return {
     sessionId: activeSessionId.value,
@@ -1562,6 +1608,7 @@ watch(
 onMounted(async () => {
   syncResponsiveLayout();
   window.addEventListener('resize', syncResponsiveLayout);
+  document.addEventListener('fullscreenchange', syncFullscreenState);
   if (!authStore.isAuthenticated) {
     await loadQwenConfig();
     return;
@@ -1583,6 +1630,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopStreaming();
   window.removeEventListener('resize', syncResponsiveLayout);
+  document.removeEventListener('fullscreenchange', syncFullscreenState);
 });
 </script>
 
@@ -1660,7 +1708,6 @@ onBeforeUnmount(() => {
             <h2>{{ copy.capabilityTitle }}</h2>
           </div>
           <div class="capability-list">
-            <span class="capability-pill">{{ copy.capabilityCitations }}</span>
             <span class="capability-pill">{{ copy.capabilityHistory }}</span>
             <span class="capability-pill">{{ copy.capabilityRag }}</span>
           </div>
@@ -1701,7 +1748,7 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
-    <main class="chat-stage">
+    <main ref="chatStageRef" class="chat-stage">
       <header class="chat-stage-head">
         <div class="stage-copy">
           <p class="chat-stage-label muted">{{ copy.activeSession }}</p>
@@ -1716,6 +1763,14 @@ onBeforeUnmount(() => {
         <div class="stage-actions">
           <button
             type="button"
+            class="mini-action"
+            :aria-label="isChatStageFullscreen ? uiCopy.fullscreenExit : uiCopy.fullscreenEnter"
+            @click="toggleChatStageFullscreen"
+          >
+            <span class="fullscreen-icon" :class="{ active: isChatStageFullscreen }" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
             class="rail-toggle"
             :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
             @click="toggleSidebar()"
@@ -1724,7 +1779,6 @@ onBeforeUnmount(() => {
           </button>
           <div v-if="result" class="stage-badges">
             <span class="stage-badge">{{ result.mode === 'llm' ? copy.modeLlm : copy.modeRetrieval }}</span>
-            <span class="stage-badge">{{ copy.strictCitation }}</span>
           </div>
         </div>
       </header>
@@ -1918,7 +1972,6 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else class="empty-state">
-          <span class="empty-eyebrow muted">{{ copy.strictCitation }}</span>
           <h3>{{ copy.emptyStateTitle }}</h3>
           <p class="muted">{{ copy.emptyStateBody }}</p>
         </div>
@@ -1953,23 +2006,23 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-else class="qwen-config-panel compact">
-            <div class="composer-toolbar">
-              <div class="toolbar-group">
-                <span class="toolbar-label">{{ qwenCopy.model }}</span>
-                <el-select
-                  :model-value="qwenConfig.selectedModel"
-                  class="qwen-model-select"
-                  @change="saveQwenConfig"
-                >
-                  <el-option
-                    v-for="model in qwenConfig.models"
-                    :key="model.model"
-                    :label="model.model"
-                    :value="model.model"
-                  />
-                </el-select>
-              </div>
-              <div class="toolbar-group search-mode-group">
+            <div class="compact-config-note" v-if="!canUseHybridSearch">
+              <p class="muted">{{ qwenCopy.localOnlyLocked }}</p>
+            </div>
+          </div>
+
+          <div class="composer-input-shell">
+            <el-input
+              v-model="question"
+              type="textarea"
+              resize="none"
+              :rows="3"
+              :placeholder="copy.placeholder"
+              :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig"
+              @keydown="handleComposerKeydown"
+            />
+            <div class="composer-inline-hints">
+              <div class="search-mode-group">
                 <span class="toolbar-label">{{ copy.searchModeTitle }}</span>
                 <div class="search-mode-picker" :aria-label="copy.searchModeTitle" role="group">
                   <button
@@ -1988,57 +2041,77 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
               </div>
-              <el-button
-                v-if="!qwenApiKeyEditorVisible"
-                type="primary"
-                plain
-                class="search-mode-key-btn"
-                :loading="qwenSaving"
-                @click="showQwenApiKeyEditor"
+              <div
+                class="qwen-tools"
+                @mouseenter="openQwenTools"
+                @mouseleave="scheduleHideQwenTools"
+                @focusin="openQwenTools"
+                @focusout="scheduleHideQwenTools"
               >
-                {{ qwenCopy.editApiKey }}
-              </el-button>
-            </div>
-            <template v-if="qwenApiKeyEditorVisible">
-              <el-input
-                v-model="qwenApiKeyInput"
-                type="password"
-                :placeholder="qwenCopy.apiKeyPlaceholder"
-                show-password
-              />
-              <div class="qwen-config-actions">
-                <el-button type="primary" plain :loading="qwenSaving" @click="saveQwenConfig()">
-                  {{ qwenCopy.saveConfig }}
-                </el-button>
-                <el-button :disabled="qwenSaving" @click="hideQwenApiKeyEditor">
-                  {{ qwenCopy.cancelEditApiKey }}
-                </el-button>
+                <button
+                  type="button"
+                  class="mini-action qwen-tools-toggle"
+                  :aria-label="uiCopy.configToolsOpen"
+                  :aria-expanded="qwenToolsVisible"
+                  @click="toggleQwenTools"
+                >
+                  <span class="chevron-icon" :class="{ active: qwenToolsVisible }" aria-hidden="true"></span>
+                </button>
+                <transition name="fade-slide">
+                  <div v-if="qwenToolsVisible" class="qwen-tools-popover section-card">
+                    <div class="toolbar-group qwen-tools-group">
+                      <span class="toolbar-label">{{ qwenCopy.model }}</span>
+                      <el-select
+                        :model-value="qwenConfig.selectedModel"
+                        class="qwen-model-select"
+                        @change="saveQwenConfig"
+                      >
+                        <el-option
+                          v-for="model in qwenConfig.models"
+                          :key="model.model"
+                          :label="model.model"
+                          :value="model.model"
+                        />
+                      </el-select>
+                    </div>
+                    <el-button
+                      v-if="!qwenApiKeyEditorVisible"
+                      type="primary"
+                      plain
+                      class="search-mode-key-btn"
+                      :loading="qwenSaving"
+                      @click="showQwenApiKeyEditor"
+                    >
+                      {{ qwenCopy.editApiKey }}
+                    </el-button>
+                    <template v-if="qwenApiKeyEditorVisible">
+                      <el-input
+                        v-model="qwenApiKeyInput"
+                        type="password"
+                        :placeholder="qwenCopy.apiKeyPlaceholder"
+                        show-password
+                      />
+                      <div class="qwen-config-actions">
+                        <el-button type="primary" plain :loading="qwenSaving" @click="saveQwenConfig()">
+                          {{ qwenCopy.saveConfig }}
+                        </el-button>
+                        <el-button :disabled="qwenSaving" @click="hideQwenApiKeyEditor">
+                          {{ qwenCopy.cancelEditApiKey }}
+                        </el-button>
+                      </div>
+                    </template>
+                  </div>
+                </transition>
               </div>
-            </template>
-            <p v-if="!canUseHybridSearch" class="muted">{{ qwenCopy.localOnlyLocked }}</p>
-          </div>
-
-          <div class="composer-card-top">
-            <div class="composer-card-top-left">
-              <span class="composer-badge">{{ copy.strictCitation }}</span>
-            </div>
-          </div>
-
-          <el-input
-            v-model="question"
-            type="textarea"
-            resize="none"
-            :rows="4"
-            :placeholder="copy.placeholder"
-            :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig"
-            @keydown="handleComposerKeydown"
-          />
-
-          <div class="composer-foot">
-            <span class="composer-hint muted">{{ copy.composerHint }}</span>
-            <div class="composer-actions">
-              <el-button v-if="streaming" plain @click="stopStreaming()">{{ copy.stop }}</el-button>
-              <el-button class="send-btn" type="primary" :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig" @click="submitQuestion()">
+              <span class="composer-hint-chip muted">{{ uiCopy.composerSubmitHint }}</span>
+              <span class="composer-hint-chip muted">{{ uiCopy.composerNewlineHint }}</span>
+              <el-button v-if="streaming" plain class="composer-inline-btn" @click="stopStreaming()">{{ copy.stop }}</el-button>
+              <el-button
+                class="send-btn composer-inline-btn"
+                type="primary"
+                :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig"
+                @click="submitQuestion()"
+              >
                 <span class="send-btn-content">
                   <span>{{ loading ? copy.asking : copy.ask }}</span>
                   <span class="send-btn-arrow" aria-hidden="true">-></span>
@@ -2052,11 +2125,20 @@ onBeforeUnmount(() => {
 
     <aside class="context-rail">
       <section class="section-card context-panel sources-panel">
-        <div class="section-heading compact-heading">
-          <h2>{{ copy.sourcesTitle }}</h2>
+        <div class="section-heading compact-heading rail-heading">
+          <h2 v-if="!contextRailCollapsed">{{ copy.sourcesTitle }}</h2>
+          <button
+            type="button"
+            class="mini-action rail-collapse-toggle"
+            :aria-label="contextRailCollapsed ? uiCopy.sourcesExpand : uiCopy.sourcesCollapse"
+            @click="toggleContextRail"
+          >
+            <span class="chevron-icon rail-chevron" :class="{ active: !contextRailCollapsed }" aria-hidden="true"></span>
+          </button>
         </div>
-        <p class="muted rail-hint">{{ copy.sourceHint }}</p>
-        <div v-if="latestSources.length" class="source-groups">
+        <template v-if="!contextRailCollapsed">
+          <p class="muted rail-hint">{{ copy.sourceHint }}</p>
+          <div v-if="latestSources.length" class="source-groups">
           <section v-if="blogSources.length" class="source-group is-blog">
             <div class="source-group-head">
               <div class="source-group-label">
@@ -2136,8 +2218,9 @@ onBeforeUnmount(() => {
               </component>
             </transition-group>
           </section>
-        </div>
-        <p v-else class="muted rail-empty">{{ copy.noSources }}</p>
+          </div>
+          <p v-else class="muted rail-empty">{{ copy.noSources }}</p>
+        </template>
       </section>
     </aside>
   </div>
@@ -2159,6 +2242,14 @@ onBeforeUnmount(() => {
 
 .knowledge-shell.sidebar-collapsed {
   grid-template-columns: 72px minmax(0, 1fr) 300px;
+}
+
+.knowledge-shell.context-rail-collapsed {
+  grid-template-columns: 300px minmax(0, 1fr) 72px;
+}
+
+.knowledge-shell.sidebar-collapsed.context-rail-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr) 72px;
 }
 
 .sidebar-overlay {
@@ -2467,6 +2558,13 @@ onBeforeUnmount(() => {
   box-shadow: 0 26px 72px rgba(0, 0, 0, 0.26);
 }
 
+.chat-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  border-radius: 0;
+}
+
 .chat-stage-head {
   display: flex;
   align-items: flex-start;
@@ -2510,6 +2608,53 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+}
+
+.fullscreen-icon,
+.chevron-icon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  position: relative;
+}
+
+.fullscreen-icon::before,
+.fullscreen-icon::after {
+  content: '';
+  position: absolute;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.fullscreen-icon::before {
+  inset: 0;
+}
+
+.fullscreen-icon::after {
+  inset: 3px;
+  opacity: 0.55;
+}
+
+.fullscreen-icon.active::after {
+  inset: 1px;
+  opacity: 1;
+}
+
+.chevron-icon::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.chevron-icon.active::before {
+  transform: rotate(225deg);
 }
 
 .stage-badges {
@@ -2966,36 +3111,13 @@ onBeforeUnmount(() => {
   position: relative;
   width: min(860px, 100%);
   margin: 0 auto;
-  padding: 12px;
+  padding: 10px 10px 12px;
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
     rgba(17, 17, 17, 0.92);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
-}
-
-.composer-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 2px 4px 10px;
-}
-
-.composer-card-top-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
 .toolbar-group {
@@ -3020,6 +3142,49 @@ onBeforeUnmount(() => {
   gap: 8px;
   min-width: 0;
   flex-wrap: wrap;
+}
+
+.qwen-tools {
+  position: relative;
+}
+
+.qwen-tools-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
+.qwen-tools-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 6;
+  width: min(340px, calc(100vw - 56px));
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(20, 20, 20, 0.96), rgba(12, 12, 12, 0.94)),
+    rgba(12, 12, 12, 0.96);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
+}
+
+.qwen-tools-group {
+  display: grid;
+  gap: 8px;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .search-mode-label {
@@ -3110,56 +3275,57 @@ onBeforeUnmount(() => {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.34);
 }
 
-.composer-foot {
+.composer-input-shell {
+  position: relative;
+}
+
+.composer-input-shell :deep(.el-textarea__inner) {
+  min-height: 108px !important;
+  padding: 14px 16px 54px;
+  border-radius: 18px;
+}
+
+.composer-inline-hints {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-top: 10px;
-  padding: 0 4px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.composer-status {
+.composer-hint-chip {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-}
-
-.composer-hint {
-  font-size: 0.82rem;
-}
-
-.composer-status.is-live {
-  color: var(--text-main);
-}
-
-.status-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.status-dots i {
-  width: 6px;
-  height: 6px;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
-  background: currentColor;
-  opacity: 0.35;
-  animation: status-pulse 1s infinite ease-in-out;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.74rem;
+  white-space: nowrap;
 }
 
-.status-dots i:nth-child(2) {
-  animation-delay: 0.12s;
+.composer-inline-btn,
+.search-mode-group,
+.search-mode-picker,
+.search-mode-option {
+  pointer-events: auto;
 }
 
-.status-dots i:nth-child(3) {
-  animation-delay: 0.24s;
+.composer-inline-hints > .search-mode-group {
+  margin-right: 0;
 }
 
-.composer-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.compact-config-note {
+  margin-bottom: 8px;
+}
+
+.compact-config-note p {
+  margin: 0;
 }
 
 .send-btn-content {
@@ -3216,6 +3382,34 @@ onBeforeUnmount(() => {
   max-height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.rail-heading {
+  align-items: center;
+}
+
+.rail-collapse-toggle {
+  margin-left: auto;
+}
+
+.rail-chevron::before {
+  transform: rotate(135deg);
+}
+
+.rail-chevron.active::before {
+  transform: rotate(-45deg);
+}
+
+.knowledge-shell.context-rail-collapsed .context-panel {
+  padding: 12px 10px;
+}
+
+.knowledge-shell.context-rail-collapsed .rail-heading {
+  justify-content: center;
+}
+
+.knowledge-shell.context-rail-collapsed .rail-collapse-toggle {
+  margin-left: 0;
 }
 
 .sources-panel {
@@ -3577,6 +3771,14 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
   .knowledge-shell.sidebar-collapsed {
     grid-template-columns: 80px minmax(0, 1fr) 280px;
   }
+
+  .knowledge-shell.context-rail-collapsed {
+    grid-template-columns: 280px minmax(0, 1fr) 72px;
+  }
+
+  .knowledge-shell.sidebar-collapsed.context-rail-collapsed {
+    grid-template-columns: 80px minmax(0, 1fr) 72px;
+  }
 }
 
 @media (max-width: 1320px) {
@@ -3592,6 +3794,10 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .knowledge-shell.context-rail-collapsed .context-rail {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -3657,8 +3863,6 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
 
   .chat-stage-head,
   .stage-actions,
-  .composer-card-top,
-  .composer-foot,
   .bubble-meta,
   .session-meta {
     flex-direction: column;
@@ -3676,6 +3880,18 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
 
   .composer-shell {
     padding: 12px 10px 12px;
+  }
+
+  .composer-inline-hints {
+    position: static;
+    margin-top: 10px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .composer-input-shell :deep(.el-textarea__inner) {
+    min-height: 96px !important;
+    padding-bottom: 14px;
   }
 
   .user-bubble {
