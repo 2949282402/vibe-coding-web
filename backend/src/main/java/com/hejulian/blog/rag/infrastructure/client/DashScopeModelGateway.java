@@ -3,6 +3,7 @@ package com.hejulian.blog.rag.infrastructure.client;
 import com.hejulian.blog.dto.AuthDtos;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hejulian.blog.exception.BusinessException;
 import com.hejulian.blog.rag.application.RagRuntimeContextHolder;
 import com.hejulian.blog.rag.config.RagProperties;
 import com.hejulian.blog.rag.domain.model.RerankResult;
@@ -98,17 +99,24 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         RagProperties.Embedding embedding = ragProperties.getEmbedding();
         return embedding.isEnabled()
                 && StringUtils.hasText(embedding.getBaseUrl())
-                && StringUtils.hasText(resolveApiKey(embedding.getApiKey()));
+                && StringUtils.hasText(resolveSystemApiKey(embedding.getApiKey()));
     }
 
     private boolean rerankConfigured() {
         RagProperties.Rerank rerank = ragProperties.getRerank();
         return rerank.isEnabled()
                 && StringUtils.hasText(rerank.getBaseUrl())
-                && StringUtils.hasText(resolveApiKey(rerank.getApiKey()));
+                && StringUtils.hasText(resolveSystemApiKey(rerank.getApiKey()));
     }
 
     private boolean generatorConfigured() {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null) {
+            RagProperties.Generator generator = ragProperties.getGenerator();
+            return StringUtils.hasText(generator.getBaseUrl())
+                    && StringUtils.hasText(runtime.apiKey())
+                    && StringUtils.hasText(runtime.chatModel());
+        }
         RagProperties.Generator generator = ragProperties.getGenerator();
         return generator.isEnabled()
                 && StringUtils.hasText(generator.getBaseUrl())
@@ -117,6 +125,14 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
     }
 
     private boolean webSearchConfigured() {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null) {
+            RagProperties.WebSearch webSearch = ragProperties.getWebSearch();
+            return runtime.webSearchEnabled()
+                    && StringUtils.hasText(webSearch.getBaseUrl())
+                    && StringUtils.hasText(runtime.apiKey())
+                    && StringUtils.hasText(runtime.chatModel());
+        }
         RagProperties.WebSearch webSearch = ragProperties.getWebSearch();
         return webSearch.isEnabled()
                 && StringUtils.hasText(webSearch.getBaseUrl())
@@ -157,7 +173,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
             RagProperties.Rerank rerank = ragProperties.getRerank();
             RestClient client = RestClient.builder()
                     .baseUrl(rerank.getBaseUrl())
-                    .defaultHeader("Authorization", "Bearer " + resolveApiKey(rerank.getApiKey()))
+                    .defaultHeader("Authorization", "Bearer " + resolveSystemApiKey(rerank.getApiKey()))
                     .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                     .build();
 
@@ -226,6 +242,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
 
             return extractChatCompletionContent(response);
         } catch (Exception ex) {
+            rethrowRuntimeChatFailure(ex, false);
             log.warn("DashScope generation failed: {}", ex.getMessage());
             return null;
         }
@@ -291,6 +308,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
                 }
             }
         } catch (Exception ex) {
+            rethrowRuntimeChatFailure(ex, false);
             String partial = answer.toString().trim();
             if (StringUtils.hasText(partial)) {
                 log.warn("DashScope streaming ended early, returning partial answer: {}", ex.getMessage());
@@ -336,6 +354,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
             }
             return new WebSearchAnswer(answer == null ? "" : answer.trim(), sources);
         } catch (Exception ex) {
+            rethrowRuntimeChatFailure(ex, true);
             log.warn("DashScope web search generation failed: {}", ex.getMessage());
             return null;
         }
@@ -346,7 +365,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
             RagProperties.Embedding embedding = ragProperties.getEmbedding();
             RestClient client = RestClient.builder()
                     .baseUrl(embedding.getBaseUrl())
-                    .defaultHeader("Authorization", "Bearer " + resolveApiKey(embedding.getApiKey()))
+                    .defaultHeader("Authorization", "Bearer " + resolveSystemApiKey(embedding.getApiKey()))
                     .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                     .build();
 
@@ -501,7 +520,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         return "";
     }
 
-    private String resolveApiKey(String primaryApiKey) {
+    private String resolveSystemApiKey(String primaryApiKey) {
         return StringUtils.hasText(primaryApiKey) ? primaryApiKey.trim() : dashscopeApiKey;
     }
 
@@ -510,7 +529,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         if (runtime != null && StringUtils.hasText(runtime.apiKey())) {
             return runtime.apiKey().trim();
         }
-        return resolveApiKey(primaryApiKey);
+        return resolveSystemApiKey(primaryApiKey);
     }
 
     private String resolveGeneratorModel(String configuredModel) {
@@ -526,7 +545,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         if (runtime != null && StringUtils.hasText(runtime.apiKey())) {
             return runtime.apiKey().trim();
         }
-        return resolveApiKey(ragProperties.getWebSearch().getApiKey());
+        return resolveSystemApiKey(ragProperties.getWebSearch().getApiKey());
     }
 
     private String resolveWebSearchModel() {
@@ -554,6 +573,16 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
             return trimmed + "compatible-mode/v1";
         }
         return trimmed + "/compatible-mode/v1";
+    }
+
+    private void rethrowRuntimeChatFailure(Exception ex, boolean webSearch) {
+        if (RagRuntimeContextHolder.get() == null) {
+            return;
+        }
+        if (webSearch) {
+            throw new BusinessException("\u5f53\u524d\u7528\u6237\u7684 API Key \u65e0\u6548\uff0c\u6216\u6240\u9009\u6a21\u578b\u4e0d\u652f\u6301\u8054\u7f51\u641c\u7d22\uff0c\u8bf7\u4fee\u6539\u540e\u91cd\u8bd5");
+        }
+        throw new BusinessException("\u5f53\u524d\u7528\u6237\u7684 API Key \u65e0\u6548\uff0c\u6216\u6240\u9009\u6a21\u578b\u4e0d\u53ef\u7528\uff0c\u8bf7\u4fee\u6539\u540e\u91cd\u8bd5");
     }
 
     private String resolveUrl(String baseUrl, String path) {

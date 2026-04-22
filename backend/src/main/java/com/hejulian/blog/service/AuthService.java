@@ -43,7 +43,7 @@ public class AuthService {
 
         var user = userAccountMapper.selectByUsername(username);
         if (user == null) {
-            throw new BusinessException("User not found");
+            throw new BusinessException("\u8d26\u53f7\u4e0d\u5b58\u5728");
         }
 
         String token = jwtTokenProvider.generateToken(user.getUsername());
@@ -57,13 +57,13 @@ public class AuthService {
         String password = String.valueOf(request.password());
 
         if (userAccountMapper.selectByUsername(username) != null) {
-            throw new BusinessException("Username already exists");
+            throw new BusinessException("\u7528\u6237\u540d\u5df2\u5b58\u5728\uff0c\u8bf7\u66f4\u6362\u540e\u91cd\u8bd5");
         }
         if (userAccountMapper.selectByEmail(email) != null) {
-            throw new BusinessException("Email already exists");
+            throw new BusinessException("\u90ae\u7bb1\u5df2\u88ab\u6ce8\u518c\uff0c\u8bf7\u76f4\u63a5\u767b\u5f55\u6216\u66f4\u6362\u90ae\u7bb1");
         }
         if (password.length() < 8) {
-            throw new BusinessException("Password must be at least 8 characters");
+            throw new BusinessException("\u5bc6\u7801\u957f\u5ea6\u4e0d\u80fd\u5c11\u4e8e 8 \u4f4d");
         }
 
         UserAccount user = new UserAccount();
@@ -149,7 +149,7 @@ public class AuthService {
     public RagRuntimeContextHolder.RagRuntimeOptions requireRagRuntimeOptions(AuthenticatedUser authenticatedUser) {
         UserAccount user = requireCurrentUser(authenticatedUser);
         if (!StringUtils.hasText(user.getQwenApiKey()) || !StringUtils.hasText(user.getQwenChatModel())) {
-            throw new BusinessException("Please configure your Qwen API Key before starting a conversation");
+            throw new BusinessException("\u53d1\u8d77\u5bf9\u8bdd\u524d\u8bf7\u5148\u914d\u7f6e\u5343\u95ee API Key");
         }
         return new RagRuntimeContextHolder.RagRuntimeOptions(
                 user.getQwenApiKey().trim(),
@@ -168,7 +168,7 @@ public class AuthService {
         }
         List<AuthDtos.QwenModelCapability> capabilities = dashScopeModelGateway.inspectQwenModels(apiKey.trim());
         if (capabilities.isEmpty()) {
-            throw new BusinessException("No available Qwen chat model was detected for this API key");
+            throw new BusinessException("\u5f53\u524d API Key \u672a\u68c0\u6d4b\u5230\u53ef\u7528\u7684\u5343\u95ee\u5bf9\u8bdd\u6a21\u578b");
         }
         writeCachedCapabilities(apiKey, capabilities);
         return capabilities;
@@ -215,7 +215,7 @@ public class AuthService {
             String normalized = requestedModel.trim();
             boolean matched = models.stream().anyMatch(item -> item.model().equals(normalized));
             if (!matched) {
-                throw new BusinessException("Selected model is not available for this API key");
+                throw new BusinessException("\u5f53\u524d API Key \u4e0d\u652f\u6301\u6240\u9009\u6a21\u578b");
             }
             return normalized;
         }
@@ -224,11 +224,11 @@ public class AuthService {
 
     private UserAccount requireCurrentUser(AuthenticatedUser authenticatedUser) {
         if (authenticatedUser == null) {
-            throw new BusinessException("Login required");
+            throw new BusinessException("\u8bf7\u5148\u767b\u5f55");
         }
         UserAccount user = userAccountMapper.selectById(authenticatedUser.getId());
         if (user == null) {
-            throw new BusinessException("User not found");
+            throw new BusinessException("\u8d26\u53f7\u4e0d\u5b58\u5728");
         }
         return user;
     }
@@ -249,7 +249,7 @@ public class AuthService {
     private String normalizeUsername(String username) {
         String normalized = String.valueOf(username).trim().toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(normalized)) {
-            throw new BusinessException("Username must not be blank");
+            throw new BusinessException("\u8bf7\u8f93\u5165\u7528\u6237\u540d");
         }
         return normalized;
     }
@@ -257,7 +257,7 @@ public class AuthService {
     private String normalizeEmail(String email) {
         String normalized = String.valueOf(email).trim().toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(normalized)) {
-            throw new BusinessException("Email must not be blank");
+            throw new BusinessException("\u8bf7\u8f93\u5165\u90ae\u7bb1");
         }
         return normalized;
     }
@@ -265,7 +265,7 @@ public class AuthService {
     private String normalizeDisplayName(String displayName) {
         String normalized = String.valueOf(displayName).trim();
         if (!StringUtils.hasText(normalized)) {
-            throw new BusinessException("Display name must not be blank");
+            throw new BusinessException("\u8bf7\u8f93\u5165\u663e\u793a\u540d\u79f0");
         }
         return normalized;
     }

@@ -37,17 +37,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.failure("Data conflict detected, please check unique fields."));
+        return ResponseEntity.badRequest().body(ApiResponse.failure("\u6570\u636e\u51b2\u7a81\uff0c\u8bf7\u68c0\u67e5\u7528\u6237\u540d\u3001\u90ae\u7bb1\u7b49\u552f\u4e00\u5b57\u6bb5"));
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.failure("Invalid username or password"));
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.failure("\u8d26\u53f7\u4e0d\u5b58\u5728\u6216\u5bc6\u7801\u9519\u8bef"));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.failure("Internal server error: " + ex.getMessage()));
+                .body(ApiResponse.failure("\u670d\u52a1\u5668\u5185\u90e8\u9519\u8bef\uff1a" + ex.getMessage()));
     }
 }

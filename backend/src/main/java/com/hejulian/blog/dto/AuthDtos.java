@@ -10,17 +10,17 @@ public final class AuthDtos {
     }
 
     public record LoginRequest(
-            @NotBlank(message = "Username must not be blank") String username,
-            @NotBlank(message = "Password must not be blank") String password
+            @NotBlank(message = "\u8bf7\u8f93\u5165\u7528\u6237\u540d") String username,
+            @NotBlank(message = "\u8bf7\u8f93\u5165\u5bc6\u7801") String password
     ) {
     }
 
     public record RegisterRequest(
-            @NotBlank(message = "Username must not be blank") String username,
-            @Email(message = "Email format is invalid")
-            @NotBlank(message = "Email must not be blank") String email,
-            @NotBlank(message = "Display name must not be blank") String displayName,
-            @NotBlank(message = "Password must not be blank") String password
+            @NotBlank(message = "\u8bf7\u8f93\u5165\u7528\u6237\u540d") String username,
+            @Email(message = "\u90ae\u7bb1\u683c\u5f0f\u4e0d\u6b63\u786e")
+            @NotBlank(message = "\u8bf7\u8f93\u5165\u90ae\u7bb1") String email,
+            @NotBlank(message = "\u8bf7\u8f93\u5165\u663e\u793a\u540d\u79f0") String displayName,
+            @NotBlank(message = "\u8bf7\u8f93\u5165\u5bc6\u7801") String password
     ) {
     }
 

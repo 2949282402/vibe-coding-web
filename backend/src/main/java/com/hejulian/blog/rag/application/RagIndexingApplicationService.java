@@ -36,7 +36,7 @@ public class RagIndexingApplicationService {
         String currentFingerprint = textProcessor.buildFingerprint(publishedPosts);
         long chunkCount = knowledgeBaseRepository.countChunks();
         String cachedFingerprint = knowledgeBaseRepository.readFingerprint();
-        boolean vectorStoreMissing = vectorStore.isVectorStoreConfigured() && !vectorStore.isCollectionReady();
+        boolean vectorStoreMissing = isVectorSyncAvailable() && !vectorStore.isCollectionReady();
 
         if (chunkCount == 0 || vectorStoreMissing || !currentFingerprint.equals(cachedFingerprint)) {
             rebuildIndexInternal(publishedPosts, currentFingerprint);
@@ -68,16 +68,27 @@ public class RagIndexingApplicationService {
                 ragProperties.getChunkSize(),
                 ragProperties.getChunkOverlap()
         );
-        List<KnowledgeChunk> enrichedChunks = enrichEmbeddings(chunks);
+        List<KnowledgeChunk> enrichedChunks = enrichEmbeddingsSafely(chunks, "sync post " + post.getId());
 
         knowledgeBaseRepository.replaceChunksByPostId(post.getId(), enrichedChunks);
 
-        if (vectorStore.isVectorStoreConfigured() && !enrichedChunks.isEmpty()) {
-            if (!vectorStore.isCollectionReady()) {
-                vectorStore.recreateCollection(enrichedChunks.getFirst().embedding().length);
+        if (vectorStore.isVectorStoreConfigured()) {
+            if (!isVectorSyncAvailable()) {
+                log.warn("Skip vector sync for post {} because Qdrant is enabled but embedding is not configured", post.getId());
+                vectorStore.deleteChunksByPostId(post.getId());
+            } else {
+                int vectorSize = resolveVectorSize(enrichedChunks);
+                if (vectorSize <= 0) {
+                    log.warn("Skip vector sync for post {} because no usable embeddings were generated", post.getId());
+                    vectorStore.deleteChunksByPostId(post.getId());
+                } else {
+                    if (!vectorStore.isCollectionReady()) {
+                        vectorStore.recreateCollection(vectorSize);
+                    }
+                    vectorStore.deleteChunksByPostId(post.getId());
+                    vectorStore.upsertChunks(enrichedChunks);
+                }
             }
-            vectorStore.deleteChunksByPostId(post.getId());
-            vectorStore.upsertChunks(enrichedChunks);
         }
 
         refreshFingerprint();
@@ -101,20 +112,23 @@ public class RagIndexingApplicationService {
                 ragProperties.getChunkSize(),
                 ragProperties.getChunkOverlap()
         );
-        List<KnowledgeChunk> enrichedChunks = enrichEmbeddings(chunks);
+        List<KnowledgeChunk> enrichedChunks = enrichEmbeddingsSafely(chunks, "rebuild index");
 
         if (vectorStore.isVectorStoreConfigured()) {
             if (enrichedChunks.isEmpty()) {
                 vectorStore.deleteCollection();
+            } else if (!isVectorSyncAvailable()) {
+                log.warn("Skip vector collection rebuild because Qdrant is enabled but embedding is not configured");
+                vectorStore.deleteCollection();
             } else {
-                int vectorSize = enrichedChunks.stream()
-                        .map(KnowledgeChunk::embedding)
-                        .filter(vector -> vector != null && vector.length > 0)
-                        .findFirst()
-                        .map(vector -> vector.length)
-                        .orElse(0);
-                vectorStore.recreateCollection(vectorSize);
-                vectorStore.upsertChunks(enrichedChunks);
+                int vectorSize = resolveVectorSize(enrichedChunks);
+                if (vectorSize <= 0) {
+                    log.warn("Skip vector collection rebuild because no usable embeddings were generated");
+                    vectorStore.deleteCollection();
+                } else {
+                    vectorStore.recreateCollection(vectorSize);
+                    vectorStore.upsertChunks(enrichedChunks);
+                }
             }
         }
 
@@ -148,6 +162,28 @@ public class RagIndexingApplicationService {
             enriched.add(chunks.get(index).withEmbedding(vector, embeddingModel.embeddingModelName()));
         }
         return enriched;
+    }
+
+    private List<KnowledgeChunk> enrichEmbeddingsSafely(List<KnowledgeChunk> chunks, String operation) {
+        try {
+            return enrichEmbeddings(chunks);
+        } catch (RuntimeException ex) {
+            log.warn("Skip embedding during {}: {}", operation, ex.getMessage());
+            return chunks;
+        }
+    }
+
+    private boolean isVectorSyncAvailable() {
+        return vectorStore.isVectorStoreConfigured() && embeddingModel.isEmbeddingConfigured();
+    }
+
+    private int resolveVectorSize(List<KnowledgeChunk> chunks) {
+        return chunks.stream()
+                .map(KnowledgeChunk::embedding)
+                .filter(vector -> vector != null && vector.length > 0)
+                .findFirst()
+                .map(vector -> vector.length)
+                .orElse(0);
     }
 
     private PublishedPost toPublishedPost(Post post) {

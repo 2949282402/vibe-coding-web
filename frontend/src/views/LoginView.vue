@@ -28,20 +28,22 @@ const registerForm = reactive({
 const copy = computed(() =>
   preferences.locale === 'zh-CN'
     ? {
-        title: '账号登录',
-        subtitle: '登录后才能发表评论、发起 RAG 对话，并配置你的千问 Key。',
-        login: '登录',
-        register: '注册',
-        username: '用户名',
-        email: '邮箱',
-        displayName: '显示名称',
-        password: '密码',
-        signIn: '立即登录',
-        signUp: '注册并登录',
-        backToSite: '返回网站',
-        loginSuccess: '登录成功',
-        registerSuccess: '注册成功',
-        passwordHint: '密码至少 8 位'
+        title: '\u8d26\u53f7\u767b\u5f55',
+        subtitle: '\u767b\u5f55\u540e\u624d\u80fd\u53d1\u8868\u8bc4\u8bba\u3001\u53d1\u8d77 RAG \u5bf9\u8bdd\uff0c\u5e76\u914d\u7f6e\u4f60\u7684\u5343\u95ee Key\u3002',
+        login: '\u767b\u5f55',
+        register: '\u6ce8\u518c',
+        username: '\u7528\u6237\u540d',
+        email: '\u90ae\u7bb1',
+        displayName: '\u663e\u793a\u540d\u79f0',
+        password: '\u5bc6\u7801',
+        signIn: '\u7acb\u5373\u767b\u5f55',
+        signUp: '\u6ce8\u518c\u5e76\u767b\u5f55',
+        backToSite: '\u8fd4\u56de\u7f51\u7ad9',
+        loginSuccess: '\u767b\u5f55\u6210\u529f',
+        registerSuccess: '\u6ce8\u518c\u6210\u529f',
+        passwordHint: '\u5bc6\u7801\u81f3\u5c11 8 \u4f4d',
+        loginTip: '\u82e5\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7528\u6237\u540d\u662f\u5426\u8f93\u5165\u6b63\u786e\uff0c\u6216\u786e\u8ba4\u5bc6\u7801\u662f\u5426\u533a\u5206\u5927\u5c0f\u5199\u3002',
+        registerTip: '\u6ce8\u518c\u65f6\u8bf7\u586b\u5199\u672a\u88ab\u5360\u7528\u7684\u7528\u6237\u540d\u548c\u90ae\u7bb1\uff0c\u6ce8\u518c\u6210\u529f\u540e\u5c06\u81ea\u52a8\u767b\u5f55\u3002'
       }
     : {
         title: 'Account Access',
@@ -57,7 +59,9 @@ const copy = computed(() =>
         backToSite: 'Back to Site',
         loginSuccess: 'Login successful',
         registerSuccess: 'Register successful',
-        passwordHint: 'Password must be at least 8 characters'
+        passwordHint: 'Password must be at least 8 characters',
+        loginTip: 'If sign-in fails, check whether the username is correct and whether the password uses the expected letter case.',
+        registerTip: 'Use a unique username and email when registering. You will be signed in automatically after success.'
       }
 );
 
@@ -94,6 +98,8 @@ async function register() {
         <span class="hero-kicker">Account</span>
         <h1>{{ copy.title }}</h1>
         <p class="muted login-copy">{{ copy.subtitle }}</p>
+        <p v-if="activeTab === 'login'" class="muted form-tip">{{ copy.loginTip }}</p>
+        <p v-else class="muted form-tip">{{ copy.registerTip }}</p>
       </div>
 
       <div class="tab-row">
@@ -179,6 +185,12 @@ html[data-theme='light'] .login-shell {
 .login-copy {
   margin: 0 0 6px;
   line-height: 1.8;
+}
+
+.form-tip {
+  margin: 0;
+  line-height: 1.7;
+  font-size: 0.92rem;
 }
 
 h1 {
