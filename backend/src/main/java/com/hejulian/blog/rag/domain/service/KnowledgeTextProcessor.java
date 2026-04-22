@@ -2,9 +2,12 @@ package com.hejulian.blog.rag.domain.service;
 
 import com.hejulian.blog.rag.domain.model.KnowledgeChunk;
 import com.hejulian.blog.rag.domain.model.PublishedPost;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -39,6 +42,7 @@ public class KnowledgeTextProcessor {
                         post.slug(),
                         index,
                         segments.get(index),
+                        buildChunkHash(segments.get(index)),
                         post.publishedAt(),
                         null,
                         null
@@ -75,6 +79,17 @@ public class KnowledgeTextProcessor {
 
     public String safeLower(String value) {
         return safe(value).toLowerCase(Locale.ROOT);
+    }
+
+    public String buildChunkHash(String content) {
+        String normalized = normalizeWhitespace(content);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(normalized.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hashed);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to build chunk hash", ex);
+        }
     }
 
     private String toPlainText(PublishedPost post) {

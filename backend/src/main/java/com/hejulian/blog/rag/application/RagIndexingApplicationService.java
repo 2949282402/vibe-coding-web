@@ -12,7 +12,9 @@ import com.hejulian.blog.rag.domain.port.VectorStore;
 import com.hejulian.blog.rag.domain.service.KnowledgeRetrievalService;
 import com.hejulian.blog.rag.domain.service.KnowledgeTextProcessor;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -68,7 +70,8 @@ public class RagIndexingApplicationService {
                 ragProperties.getChunkSize(),
                 ragProperties.getChunkOverlap()
         );
-        List<KnowledgeChunk> enrichedChunks = enrichEmbeddingsSafely(chunks, "sync post " + post.getId());
+        List<KnowledgeChunk> deduplicatedChunks = deduplicateChunks(chunks, "sync post " + post.getId());
+        List<KnowledgeChunk> enrichedChunks = enrichEmbeddingsSafely(deduplicatedChunks, "sync post " + post.getId());
 
         knowledgeBaseRepository.replaceChunksByPostId(post.getId(), enrichedChunks);
 
@@ -112,7 +115,8 @@ public class RagIndexingApplicationService {
                 ragProperties.getChunkSize(),
                 ragProperties.getChunkOverlap()
         );
-        List<KnowledgeChunk> enrichedChunks = enrichEmbeddingsSafely(chunks, "rebuild index");
+        List<KnowledgeChunk> deduplicatedChunks = deduplicateChunks(chunks, "rebuild index");
+        List<KnowledgeChunk> enrichedChunks = enrichEmbeddingsSafely(deduplicatedChunks, "rebuild index");
 
         if (vectorStore.isVectorStoreConfigured()) {
             if (enrichedChunks.isEmpty()) {
@@ -184,6 +188,30 @@ public class RagIndexingApplicationService {
                 .findFirst()
                 .map(vector -> vector.length)
                 .orElse(0);
+    }
+
+    private List<KnowledgeChunk> deduplicateChunks(List<KnowledgeChunk> chunks, String operation) {
+        if (chunks.isEmpty()) {
+            return chunks;
+        }
+
+        Set<String> seenHashes = new HashSet<>();
+        List<KnowledgeChunk> deduplicated = new ArrayList<>(chunks.size());
+        int skipped = 0;
+
+        for (KnowledgeChunk chunk : chunks) {
+            String hash = chunk.contentHash();
+            if (!seenHashes.add(hash)) {
+                skipped += 1;
+                continue;
+            }
+            deduplicated.add(chunk);
+        }
+
+        if (skipped > 0) {
+            log.info("Deduplicated {} repeated chunk(s) during {}", skipped, operation);
+        }
+        return deduplicated;
     }
 
     private PublishedPost toPublishedPost(Post post) {

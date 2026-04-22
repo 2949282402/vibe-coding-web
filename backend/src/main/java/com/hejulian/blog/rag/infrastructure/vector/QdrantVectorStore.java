@@ -184,6 +184,7 @@ public class QdrantVectorStore implements VectorStore {
         payload.put("post_slug", chunk.postSlug());
         payload.put("chunk_index", chunk.chunkIndex());
         payload.put("content", chunk.content());
+        payload.put("content_hash", chunk.contentHash());
         payload.put("published_at", chunk.publishedAt() == null ? null : chunk.publishedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         payload.put("embedding_model", chunk.embeddingModel());
 
@@ -205,6 +206,7 @@ public class QdrantVectorStore implements VectorStore {
                 payload.path("post_slug").asText(""),
                 payload.path("chunk_index").asInt(),
                 payload.path("content").asText(""),
+                payload.path("content_hash").asText(""),
                 publishedAt,
                 null,
                 payload.path("embedding_model").asText("")

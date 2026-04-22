@@ -83,24 +83,27 @@ CREATE TABLE IF NOT EXISTS comments (
     CONSTRAINT fk_comments_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS rag_chunks (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    post_id BIGINT NOT NULL,
-    post_title VARCHAR(200) NOT NULL,
-    post_slug VARCHAR(220) NOT NULL,
-    chunk_index INT NOT NULL,
-    content LONGTEXT NOT NULL,
-    embedding_json LONGTEXT NULL,
-    embedding_model VARCHAR(64) NULL,
-    embedding_dimensions INT NULL,
-    published_at DATETIME NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_rag_chunks_post_chunk (post_id, chunk_index),
-    KEY idx_rag_chunks_post_id (post_id),
-    KEY idx_rag_chunks_post_slug (post_slug),
-    CONSTRAINT fk_rag_chunks_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
-) ENGINE=InnoDB;
+  CREATE TABLE IF NOT EXISTS rag_chunks (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      post_id BIGINT NOT NULL,
+      post_title VARCHAR(200) NOT NULL,
+      post_slug VARCHAR(220) NOT NULL,
+      chunk_index INT NOT NULL,
+      content LONGTEXT NOT NULL,
+      content_hash VARCHAR(64) NULL,
+      embedding_json LONGTEXT NULL,
+      embedding_model VARCHAR(64) NULL,
+      embedding_dimensions INT NULL,
+      published_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_rag_chunks_post_chunk (post_id, chunk_index),
+      UNIQUE KEY uk_rag_chunks_post_hash (post_id, content_hash),
+      KEY idx_rag_chunks_post_id (post_id),
+      KEY idx_rag_chunks_content_hash (content_hash),
+      KEY idx_rag_chunks_post_slug (post_slug),
+      CONSTRAINT fk_rag_chunks_post FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
+  ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS rag_chat_messages (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

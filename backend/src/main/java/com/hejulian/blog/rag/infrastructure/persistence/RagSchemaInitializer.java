@@ -24,6 +24,7 @@ public class RagSchemaInitializer implements CommandLineRunner {
             jdbcTemplate.execute(buildCreateChunkTableSql(productName));
             jdbcTemplate.execute(buildCreateChatSessionTableSql(productName));
             jdbcTemplate.execute(buildCreateChatMessageTableSql(productName));
+            ensureColumn(metadata, "rag_chunks", "content_hash", "VARCHAR(64)");
             ensureColumn(metadata, "rag_chunks", "embedding_json", isH2(productName) ? "CLOB" : "LONGTEXT");
             ensureColumn(metadata, "rag_chunks", "embedding_model", "VARCHAR(64)");
             ensureColumn(metadata, "rag_chunks", "embedding_dimensions", "INT");
@@ -34,6 +35,8 @@ public class RagSchemaInitializer implements CommandLineRunner {
             ensureColumn(metadata, "rag_chat_messages", "sources_json", isH2(productName) ? "CLOB" : "LONGTEXT");
             ensureColumn(metadata, "rag_chat_messages", "variants_json", isH2(productName) ? "CLOB" : "LONGTEXT");
             ensureColumn(metadata, "rag_chat_sessions", "user_id", "BIGINT");
+            backfillChunkHashes();
+            ensureChunkHashUniqueIndex(productName);
             backfillMissingSessions();
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to initialize rag_chunks schema", ex);
@@ -54,6 +57,7 @@ public class RagSchemaInitializer implements CommandLineRunner {
                     post_slug VARCHAR(220) NOT NULL,
                     chunk_index INT NOT NULL,
                     content %s NOT NULL,
+                    content_hash VARCHAR(64) NULL,
                     embedding_json %s NULL,
                     embedding_model VARCHAR(64) NULL,
                     embedding_dimensions INT NULL,
@@ -61,6 +65,7 @@ public class RagSchemaInitializer implements CommandLineRunner {
                     created_at %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at %s NOT NULL DEFAULT CURRENT_TIMESTAMP%s,
                     CONSTRAINT uk_rag_chunks_post_chunk UNIQUE (post_id, chunk_index),
+                    CONSTRAINT uk_rag_chunks_post_hash UNIQUE (post_id, content_hash),
                     CONSTRAINT fk_rag_chunks_post FOREIGN KEY (post_id) REFERENCES posts (id)
                 )
                 """.formatted(contentType, contentType, timestampType, timestampType, timestampType, updateClause);
@@ -140,6 +145,45 @@ public class RagSchemaInitializer implements CommandLineRunner {
                 """);
     }
 
+    private void backfillChunkHashes() {
+        jdbcTemplate.query("SELECT id, content FROM rag_chunks WHERE content_hash IS NULL OR content_hash = ''",
+                resultSet -> {
+                    long id = resultSet.getLong("id");
+                    String content = resultSet.getString("content");
+                    jdbcTemplate.update("UPDATE rag_chunks SET content_hash = ? WHERE id = ?", buildChunkHash(content), id);
+                });
+    }
+
+    private void ensureChunkHashUniqueIndex(String productName) {
+        if (isH2(productName)) {
+            jdbcTemplate.execute("""
+                    DELETE FROM rag_chunks
+                    WHERE id IN (
+                        SELECT rc1.id
+                        FROM rag_chunks rc1
+                        JOIN rag_chunks rc2
+                          ON rc1.post_id = rc2.post_id
+                         AND rc1.content_hash = rc2.content_hash
+                         AND rc1.id > rc2.id
+                    )
+                    """);
+        } else {
+            jdbcTemplate.execute("""
+                    DELETE rc1
+                    FROM rag_chunks rc1
+                    INNER JOIN rag_chunks rc2
+                        ON rc1.post_id = rc2.post_id
+                       AND rc1.content_hash = rc2.content_hash
+                       AND rc1.id > rc2.id
+                    """);
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE rag_chunks ADD CONSTRAINT uk_rag_chunks_post_hash UNIQUE (post_id, content_hash)");
+        } catch (Exception ignored) {
+            // Index may already exist.
+        }
+    }
+
     private void ensureColumn(DatabaseMetaData metadata, String tableName, String columnName, String columnType) throws SQLException {
         if (columnExists(metadata, tableName, columnName)) {
             return;
@@ -156,6 +200,17 @@ public class RagSchemaInitializer implements CommandLineRunner {
     private boolean hasColumn(DatabaseMetaData metadata, String tableName, String columnName) throws SQLException {
         try (var resultSet = metadata.getColumns(null, null, tableName, columnName)) {
             return resultSet.next();
+        }
+    }
+
+    private String buildChunkHash(String content) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest((content == null ? "" : content.trim().replaceAll("\\s+", " "))
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(hashed);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to build chunk hash", ex);
         }
     }
 }

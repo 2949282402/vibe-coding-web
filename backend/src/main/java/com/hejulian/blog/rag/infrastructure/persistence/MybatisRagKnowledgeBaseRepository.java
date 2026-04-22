@@ -228,6 +228,7 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
                 entity.getPostSlug(),
                 entity.getChunkIndex(),
                 entity.getContent(),
+                entity.getContentHash(),
                 entity.getPublishedAt(),
                 readEmbedding(entity.getEmbeddingJson()),
                 entity.getEmbeddingModel()
@@ -241,6 +242,7 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
         entity.setPostSlug(chunk.postSlug());
         entity.setChunkIndex(chunk.chunkIndex());
         entity.setContent(chunk.content());
+        entity.setContentHash(chunk.contentHash());
         entity.setPublishedAt(chunk.publishedAt());
         entity.setEmbeddingJson(writeEmbedding(chunk.embedding()));
         entity.setEmbeddingModel(chunk.embeddingModel());

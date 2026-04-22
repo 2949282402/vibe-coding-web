@@ -14,6 +14,7 @@ public class RagChunk {
     private String postSlug;
     private Integer chunkIndex;
     private String content;
+    private String contentHash;
     private String embeddingJson;
     private String embeddingModel;
     private Integer embeddingDimensions;
