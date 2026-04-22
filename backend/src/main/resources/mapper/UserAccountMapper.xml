@@ -7,17 +7,35 @@
     <resultMap id="UserAccountResultMap" type="com.hejulian.blog.entity.UserAccount">
         <id property="id" column="id"/>
         <result property="username" column="username"/>
+        <result property="email" column="email"/>
         <result property="password" column="password"/>
         <result property="displayName" column="display_name"/>
         <result property="role" column="role"/>
+        <result property="qwenApiKey" column="qwen_api_key"/>
+        <result property="qwenChatModel" column="qwen_chat_model"/>
+        <result property="qwenWebSearchEnabled" column="qwen_web_search_enabled"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
     <select id="selectByUsername" resultMap="UserAccountResultMap">
-        SELECT id, username, password, display_name, role, created_at, updated_at
+        SELECT id, username, email, password, display_name, role, qwen_api_key, qwen_chat_model, qwen_web_search_enabled, created_at, updated_at
         FROM user_accounts
         WHERE username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="selectById" resultMap="UserAccountResultMap">
+        SELECT id, username, email, password, display_name, role, qwen_api_key, qwen_chat_model, qwen_web_search_enabled, created_at, updated_at
+        FROM user_accounts
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectByEmail" resultMap="UserAccountResultMap">
+        SELECT id, username, email, password, display_name, role, qwen_api_key, qwen_chat_model, qwen_web_search_enabled, created_at, updated_at
+        FROM user_accounts
+        WHERE email = #{email}
         LIMIT 1
     </select>
 
@@ -26,9 +44,21 @@
     </select>
 
     <insert id="insert" parameterType="com.hejulian.blog.entity.UserAccount" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO user_accounts (username, password, display_name, role, created_at, updated_at)
-        VALUES (#{username}, #{password}, #{displayName}, #{role}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO user_accounts (
+            username, email, password, display_name, role, qwen_api_key, qwen_chat_model, qwen_web_search_enabled, created_at, updated_at
+        )
+        VALUES (
+            #{username}, #{email}, #{password}, #{displayName}, #{role}, #{qwenApiKey}, #{qwenChatModel}, #{qwenWebSearchEnabled}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
     </insert>
 
-</mapper>
+    <update id="updateQwenSettings">
+        UPDATE user_accounts
+        SET qwen_api_key = #{qwenApiKey},
+            qwen_chat_model = #{qwenChatModel},
+            qwen_web_search_enabled = #{qwenWebSearchEnabled},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
 
+</mapper>

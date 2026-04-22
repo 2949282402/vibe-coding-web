@@ -25,14 +25,23 @@ Use it for requests such as:
 - Backend: Spring Boot 3 + MyBatis + JWT
 - RAG logic lives inside the backend, not as a separate service
 - Optional local model bridge exists in `llm-bridge/`
+- Redis is enabled through Spring Cache and is now used for public content caches, RAG session or history caches, and cached Qwen model capability results
+- User login is required for comments and RAG chat, but public article browsing and homepage retrieval remain public
+- Per-user Qwen API Key, selected model, and web-search support state are stored on the user record
+- Current web search path uses Qwen compatible chat completions with `enable_search=true`; do not switch back to the older separate web-search service path unless explicitly requested
 
 Key paths:
 
 - `frontend/src/views/KnowledgeView.vue`
 - `frontend/src/api/blog.js`
+- `frontend/src/api/auth.js`
+- `frontend/src/stores/auth.js`
 - `frontend/src/router/index.js`
 - `frontend/src/layouts/MainLayout.vue`
 - `backend/src/main/java/com/hejulian/blog/rag/`
+- `backend/src/main/java/com/hejulian/blog/service/AuthService.java`
+- `backend/src/main/java/com/hejulian/blog/common/CacheNames.java`
+- `backend/src/main/java/com/hejulian/blog/config/RedisConfig.java`
 - `backend/src/main/resources/application.yml`
 - `backend/src/main/java/com/hejulian/blog/rag/infrastructure/persistence/RagSchemaInitializer.java`
 - `sql/blog_mysql_init.sql`
@@ -52,6 +61,7 @@ Use this section to quickly locate where a feature lives before editing.
 - Category or tag listing page entry: `frontend/src/views/CategoriesView.vue`
 - Login page: `frontend/src/views/LoginView.vue`
 - Knowledge chat page: `frontend/src/views/KnowledgeView.vue`
+- User auth and profile actions currently surface through `frontend/src/layouts/MainLayout.vue` and `frontend/src/views/LoginView.vue`
 
 ### Frontend admin modules
 
@@ -83,6 +93,8 @@ Use this section to quickly locate where a feature lives before editing.
 - Auth service: `backend/src/main/java/com/hejulian/blog/service/AuthService.java`
 - JWT and permission config: `backend/src/main/java/com/hejulian/blog/config/SecurityConfig.java`
 - JWT filter and token logic: `backend/src/main/java/com/hejulian/blog/security/`
+- Redis cache config: `backend/src/main/java/com/hejulian/blog/config/RedisConfig.java`
+- Shared cache names: `backend/src/main/java/com/hejulian/blog/common/CacheNames.java`
 
 ### Backend admin modules
 
@@ -108,6 +120,7 @@ Use this section to quickly locate where a feature lives before editing.
 - RAG schema initializer: `backend/src/main/java/com/hejulian/blog/rag/infrastructure/persistence/RagSchemaInitializer.java`
 - Qdrant vector store integration: `backend/src/main/java/com/hejulian/blog/rag/infrastructure/vector/QdrantVectorStore.java`
 - RAG runtime config: `backend/src/main/java/com/hejulian/blog/rag/config/RagProperties.java`
+- Chat session and history cache orchestration currently lives in `backend/src/main/java/com/hejulian/blog/rag/application/RagApplicationService.java`
 
 ### Backend persistence modules
 
@@ -129,9 +142,11 @@ Use this section to quickly locate where a feature lives before editing.
 - Category or tag management: `frontend/src/views/admin/TaxonomyManageView.vue`, `backend/src/main/java/com/hejulian/blog/controller/admin/AdminTaxonomyController.java`
 - Comment moderation: `frontend/src/views/admin/CommentManageView.vue`, `backend/src/main/java/com/hejulian/blog/controller/admin/AdminCommentController.java`
 - Login and permission issues: `frontend/src/views/LoginView.vue`, `frontend/src/stores/auth.js`, `backend/src/main/java/com/hejulian/blog/controller/AuthController.java`, `backend/src/main/java/com/hejulian/blog/security/`
+- User Qwen API Key, model, and web-search capability issues: `frontend/src/views/KnowledgeView.vue`, `frontend/src/api/auth.js`, `backend/src/main/java/com/hejulian/blog/service/AuthService.java`, `backend/src/main/java/com/hejulian/blog/rag/infrastructure/client/DashScopeModelGateway.java`
 - Public article display issues: `frontend/src/views/HomeView.vue`, `frontend/src/views/PostDetailView.vue`, `frontend/src/views/ArchiveView.vue`, `backend/src/main/java/com/hejulian/blog/controller/PublicBlogController.java`
 - Knowledge chat UI issues: `frontend/src/views/KnowledgeView.vue`, `frontend/src/api/blog.js`, `frontend/src/utils/markdown.js`
 - RAG answer generation, sources, feedback, history, deletion, search mode: `backend/src/main/java/com/hejulian/blog/controller/RagController.java`, `backend/src/main/java/com/hejulian/blog/rag/application/RagApplicationService.java`, `backend/src/main/resources/mapper/RagChatSessionMapper.xml`, `backend/src/main/resources/mapper/RagChatMessageMapper.xml`
+- RAG cache and refresh performance issues: `backend/src/main/java/com/hejulian/blog/common/CacheNames.java`, `backend/src/main/java/com/hejulian/blog/config/RedisConfig.java`, `backend/src/main/java/com/hejulian/blog/service/AuthService.java`, `backend/src/main/java/com/hejulian/blog/rag/application/RagApplicationService.java`
 - Feedback admin panel issues: `frontend/src/views/admin/RagFeedbackManageView.vue`, `backend/src/main/java/com/hejulian/blog/controller/admin/AdminRagFeedbackController.java`
 - Image upload issues: `backend/src/main/java/com/hejulian/blog/controller/admin/AdminUploadController.java`, `backend/src/main/java/com/hejulian/blog/service/UploadStorageService.java`, plus the calling frontend page
 
@@ -189,7 +204,7 @@ The current project state expects:
 - citation clicks should still activate the correct source owner and jump to the matching source
 - history records should restore message `sources` so old citations still work
 - search mode offers only `LOCAL_ONLY` and `LOCAL_AND_WEB`
-- web search uses the official Qwen web-search path; do not reintroduce the old DuckDuckGo scraping logic unless explicitly asked
+- web search uses the Qwen compatible chat path with `enable_search=true`; do not reintroduce the old DuckDuckGo scraping logic or the separate old web-search service path unless explicitly asked
 
 ### 4. Feedback features have product requirements
 
@@ -219,6 +234,16 @@ If a change affects schema or stored RAG data, inspect whether it belongs in:
 
 Do not assume one file is enough.
 
+### 7. Refresh performance assumptions now matter
+
+The current project state expects:
+
+- opening `/knowledge` should not trigger a full remote model-capability probe on every refresh
+- `GET /api/auth/qwen-config` should prefer saved state or cached capability results
+- `POST /api/auth/qwen-config` is the right place to probe and refresh available models when the user updates a key
+- RAG session lists and chat history should use Redis-backed Spring Cache where possible
+- any write to chat history, replay, feedback, rename, delete, restore, or purge must evict the related caches
+
 ## Practical workflow
 
 ### Frontend changes
@@ -245,6 +270,7 @@ Usually inspect:
 - mapper interface
 - mapper XML
 - persistence initializer if schema changed
+- cache names or Redis config if the change affects refresh cost or repeated reads
 
 If changing chat history, sources, feedback, or session deletion flows, trace the data from controller to mapper XML instead of patching only one layer.
 
@@ -280,9 +306,17 @@ If a new change breaks any of these, treat it as a likely regression.
 ### Search behavior
 
 - `LOCAL_ONLY`: station or knowledge-base retrieval only
-- `LOCAL_AND_WEB`: station retrieval plus official web search path
+- `LOCAL_AND_WEB`: station retrieval plus Qwen compatible chat completions with `enable_search=true`
 
 Do not add back removed DuckDuckGo code paths by accident.
+
+### Qwen configuration behavior
+
+- `GET /api/auth/qwen-config` should be treated as a read-mostly endpoint
+- avoid re-probing all candidate models on every page refresh
+- capability probing is expensive because it may call multiple remote models
+- prefer caching model capability results by API Key and using the saved selected model for page restore
+- if a user reports that the model list is wrong, inspect `backend/src/main/java/com/hejulian/blog/service/AuthService.java` and `backend/src/main/java/com/hejulian/blog/rag/infrastructure/client/DashScopeModelGateway.java` together
 
 ### Composer behavior
 
@@ -299,6 +333,7 @@ After finishing a change, check what applies:
 - If locale text changed, were both Chinese and English copies updated?
 - If frontend code changed, did `frontend` build successfully?
 - If backend payload shape changed, did you verify the matching frontend consumer?
+- If backend refresh behavior changed, did you verify which requests still hit remote model APIs and which now use Redis or saved state?
 
 ## Response style for this repo
 

@@ -1,6 +1,5 @@
 package com.hejulian.blog.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
@@ -91,9 +90,6 @@ public final class BlogDtos {
 
     public record CommentCreateRequest(
             @NotNull(message = "Post id is required") Long postId,
-            @NotBlank(message = "Nickname must not be blank") String nickname,
-            @Email(message = "Email format is invalid")
-            @NotBlank(message = "Email must not be blank") String email,
             @NotBlank(message = "Comment content must not be blank") String content
     ) {
     }

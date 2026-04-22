@@ -1,21 +1,61 @@
 <script setup>
 import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AppControls from '../components/AppControls.vue';
+import { useAuthStore } from '../stores/auth';
 import { usePreferencesStore } from '../stores/preferences';
 
 const preferences = usePreferencesStore();
+const authStore = useAuthStore();
 const route = useRoute();
+const router = useRouter();
 const immersiveMode = computed(() => Boolean(route.meta.immersive));
 const hideFooter = computed(() => Boolean(route.meta.hideFooter));
 
-const navItems = computed(() => [
-  { label: preferences.t('main.navHome'), to: '/' },
-  { label: preferences.t('main.navKnowledge'), to: '/knowledge' },
-  { label: preferences.t('main.navArchive'), to: '/archives' },
-  { label: preferences.t('main.navCategories'), to: '/categories' },
-  { label: preferences.t('main.navConsole'), to: '/admin' }
-]);
+const authCopy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        login: '登录',
+        logout: '退出登录',
+        admin: '后台',
+        profile: '当前用户'
+      }
+    : {
+        login: 'Sign In',
+        logout: 'Sign Out',
+        admin: 'Admin',
+        profile: 'Current User'
+      }
+);
+
+const navItems = computed(() => {
+  const items = [
+    { label: preferences.t('main.navHome'), to: '/' },
+    { label: preferences.t('main.navKnowledge'), to: '/knowledge' },
+    { label: preferences.t('main.navArchive'), to: '/archives' },
+    { label: preferences.t('main.navCategories'), to: '/categories' }
+  ];
+  if (authStore.isAdmin) {
+    items.push({ label: authCopy.value.admin, to: '/admin' });
+  }
+  return items;
+});
+
+function isNavActive(item) {
+  if (item.to === '/') {
+    return route.path === '/';
+  }
+  return route.path === item.to || route.path.startsWith(`${item.to}/`);
+}
+
+function goLogin() {
+  router.push({ name: 'login', query: { redirect: route.fullPath } });
+}
+
+function logout() {
+  authStore.logout();
+  router.push('/');
+}
 </script>
 
 <template>
@@ -31,10 +71,25 @@ const navItems = computed(() => [
 
       <div class="topbar-actions">
         <nav class="nav glass-subnav">
-          <router-link v-for="item in navItems" :key="item.to" :to="item.to">
+          <router-link
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            :class="{ active: isNavActive(item) }"
+          >
             {{ item.label }}
           </router-link>
         </nav>
+
+        <div v-if="authStore.isAuthenticated" class="user-rail glass-subnav">
+          <div class="user-meta">
+            <span class="user-label">{{ authCopy.profile }}</span>
+            <strong>{{ authStore.user?.displayName || authStore.user?.username }}</strong>
+          </div>
+          <button type="button" class="auth-btn" @click="logout">{{ authCopy.logout }}</button>
+        </div>
+        <button v-else type="button" class="auth-btn glass-subnav" @click="goLogin">{{ authCopy.login }}</button>
+
         <AppControls />
       </div>
     </header>
@@ -165,10 +220,39 @@ const navItems = computed(() => [
 }
 
 .nav a:hover,
-.nav .router-link-active {
+.nav a.active {
   color: var(--text-main);
   background: var(--bg-panel-strong);
   border-color: var(--line-strong);
+}
+
+.user-rail {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding-inline: 12px;
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.auth-btn {
+  border: 0;
+  color: var(--text-main);
+  background: transparent;
+  cursor: pointer;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font: inherit;
 }
 
 .footer {
@@ -214,7 +298,8 @@ const navItems = computed(() => [
 
   .topbar,
   .footer,
-  .topbar-actions {
+  .topbar-actions,
+  .user-rail {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -224,7 +309,8 @@ const navItems = computed(() => [
     width: 100%;
   }
 
-  .nav a {
+  .nav a,
+  .auth-btn {
     flex: 1 1 calc(50% - 10px);
     justify-content: center;
     text-align: center;

@@ -7,7 +7,7 @@ const http = axios.create({
 });
 
 http.interceptors.request.use((config) => {
-  const token = localStorage.getItem('blog-admin-token');
+  const token = localStorage.getItem('blog-auth-token') || localStorage.getItem('blog-admin-token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -17,11 +17,13 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message = error.response?.data?.message || error.message || '请求失败';
+    const message = error.response?.data?.message || error.message || 'Request failed';
     if (error.response?.status === 401) {
+      localStorage.removeItem('blog-auth-token');
+      localStorage.removeItem('blog-auth-user');
       localStorage.removeItem('blog-admin-token');
       localStorage.removeItem('blog-admin-user');
-      if (location.pathname.startsWith('/admin')) {
+      if (location.pathname.startsWith('/admin') || location.pathname.startsWith('/knowledge')) {
         location.href = '/login';
       }
     } else {
@@ -31,4 +33,4 @@ http.interceptors.response.use(
   }
 );
 
-export default http;
+export default http;

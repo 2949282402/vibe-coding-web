@@ -9,6 +9,8 @@ public class Comment extends BaseEntity {
 
     private Long postId;
 
+    private Long userId;
+
     private String postTitle;
 
     private String nickname;

@@ -7,11 +7,14 @@ import com.hejulian.blog.entity.Comment;
 import com.hejulian.blog.entity.CommentStatus;
 import com.hejulian.blog.entity.Post;
 import com.hejulian.blog.entity.PostStatus;
+import com.hejulian.blog.entity.UserAccount;
 import com.hejulian.blog.exception.BusinessException;
 import com.hejulian.blog.mapper.CategoryMapper;
 import com.hejulian.blog.mapper.CommentMapper;
 import com.hejulian.blog.mapper.PostMapper;
 import com.hejulian.blog.mapper.TagMapper;
+import com.hejulian.blog.mapper.UserAccountMapper;
+import com.hejulian.blog.security.AuthenticatedUser;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,7 @@ public class PublicBlogService {
     private final CategoryMapper categoryMapper;
     private final TagMapper tagMapper;
     private final CommentMapper commentMapper;
+    private final UserAccountMapper userAccountMapper;
     private final CacheManager cacheManager;
 
     @Value("${blog.site.name}")
@@ -160,7 +164,16 @@ public class PublicBlogService {
     }
 
     @Transactional
-    public void createComment(BlogDtos.CommentCreateRequest request) {
+    public void createComment(AuthenticatedUser authenticatedUser, BlogDtos.CommentCreateRequest request) {
+        if (authenticatedUser == null) {
+            throw new BusinessException("Login required");
+        }
+
+        UserAccount user = userAccountMapper.selectById(authenticatedUser.getId());
+        if (user == null) {
+            throw new BusinessException("User not found");
+        }
+
         Post post = postMapper.selectById(request.postId());
         if (post == null || post.getStatus() != PostStatus.PUBLISHED) {
             throw new BusinessException("Post not found or not published");
@@ -172,8 +185,9 @@ public class PublicBlogService {
 
         Comment comment = new Comment();
         comment.setPostId(post.getId());
-        comment.setNickname(request.nickname().trim());
-        comment.setEmail(request.email().trim());
+        comment.setUserId(user.getId());
+        comment.setNickname(user.getDisplayName());
+        comment.setEmail(user.getEmail());
         comment.setContent(request.content().trim());
         comment.setStatus(CommentStatus.PENDING);
         commentMapper.insert(comment);

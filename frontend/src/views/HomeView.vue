@@ -1,26 +1,40 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { fetchSiteHomeApi } from '../api/blog';
+import { fetchSiteHomeApi, searchKnowledgePublicApi } from '../api/blog';
 import PostCard from '../components/PostCard.vue';
+import { renderMarkdown } from '../utils/markdown';
 import { usePreferencesStore } from '../stores/preferences';
 
 const preferences = usePreferencesStore();
 const loading = ref(true);
-const ragCopy = computed(() => {
-  if (preferences.locale === 'zh-CN') {
-    return {
-      title: '知识问答',
-      description: '基于已发布文章做检索增强问答，适合快速定位方案、设计思路和交付细节。',
-      cta: '进入 RAG'
-    };
-  }
+const searchLoading = ref(false);
+const searchQuestion = ref('');
+const searchResult = ref(null);
 
-  return {
-    title: 'Knowledge Assistant',
-    description: 'Ask retrieval-augmented questions against published blog content to find designs, steps, and delivery details.',
-    cta: 'Open RAG'
-  };
-});
+const homeCopy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        ragTitle: '站内知识检索',
+        ragDescription: '不接入大模型，直接基于当前站内文章做 RAG 检索与引用展示。',
+        ragButton: '打开聊天页',
+        searchTitle: '首页快速检索',
+        searchPlaceholder: '输入问题，直接检索站内文章',
+        searchButton: '开始检索',
+        searchEmpty: '检索结果会显示在这里。',
+        sources: '参考来源'
+      }
+    : {
+        ragTitle: 'On-site Knowledge Retrieval',
+        ragDescription: 'Run RAG retrieval directly on published posts without using a chat model.',
+        ragButton: 'Open Chat',
+        searchTitle: 'Quick Search',
+        searchPlaceholder: 'Ask a question against on-site posts',
+        searchButton: 'Search',
+        searchEmpty: 'Search results will appear here.',
+        sources: 'Sources'
+      }
+);
+
 const pageData = ref({
   siteName: 'HeJulian Blog',
   heroTitle: '',
@@ -32,6 +46,8 @@ const pageData = ref({
   stats: {}
 });
 
+const renderedSearchAnswer = computed(() => renderMarkdown(searchResult.value?.answer || ''));
+
 const loadData = async () => {
   loading.value = true;
   try {
@@ -39,6 +55,21 @@ const loadData = async () => {
     pageData.value = res.data;
   } finally {
     loading.value = false;
+  }
+};
+
+const searchKnowledge = async () => {
+  const question = searchQuestion.value.trim();
+  if (!question) {
+    return;
+  }
+
+  searchLoading.value = true;
+  try {
+    const res = await searchKnowledgePublicApi(question);
+    searchResult.value = res.data;
+  } finally {
+    searchLoading.value = false;
   }
 };
 
@@ -74,6 +105,39 @@ onMounted(loadData);
       </div>
     </section>
 
+    <section class="section-card search-panel">
+      <div class="section-heading refined-heading">
+        <h2>{{ homeCopy.searchTitle }}</h2>
+      </div>
+      <div class="search-row">
+        <el-input
+          v-model="searchQuestion"
+          :placeholder="homeCopy.searchPlaceholder"
+          @keyup.enter="searchKnowledge"
+        />
+        <el-button type="primary" :loading="searchLoading" @click="searchKnowledge">{{ homeCopy.searchButton }}</el-button>
+      </div>
+      <div class="search-result-panel">
+        <div v-if="searchResult" class="search-answer">
+          <div class="markdown-body" v-html="renderedSearchAnswer"></div>
+          <div v-if="searchResult.sources?.length" class="source-list">
+            <strong>{{ homeCopy.sources }}</strong>
+            <div class="chip-list">
+              <router-link
+                v-for="source in searchResult.sources"
+                :key="`${source.slug || source.title}-${source.citationIndex}`"
+                class="chip"
+                :to="source.slug ? `/posts/${source.slug}` : '/archives'"
+              >
+                [{{ source.citationIndex }}] {{ source.title }}
+              </router-link>
+            </div>
+          </div>
+        </div>
+        <p v-else class="muted">{{ homeCopy.searchEmpty }}</p>
+      </div>
+    </section>
+
     <section class="split-grid content-section">
       <div class="stack">
         <div class="section-heading refined-heading">
@@ -97,10 +161,10 @@ onMounted(loadData);
       <aside class="side-stack">
         <section class="section-card sidebar-card rag-card">
           <div class="section-heading refined-heading">
-            <h2>{{ ragCopy.title }}</h2>
+            <h2>{{ homeCopy.ragTitle }}</h2>
           </div>
-          <p class="muted rag-copy">{{ ragCopy.description }}</p>
-          <router-link to="/knowledge" class="rag-link">{{ ragCopy.cta }}</router-link>
+          <p class="muted rag-copy">{{ homeCopy.ragDescription }}</p>
+          <router-link to="/knowledge" class="rag-link">{{ homeCopy.ragButton }}</router-link>
         </section>
 
         <section class="section-card sidebar-card">
@@ -203,6 +267,34 @@ onMounted(loadData);
   font-size: 0.8rem;
 }
 
+.search-panel {
+  margin-top: 24px;
+  padding: 28px;
+}
+
+.search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.search-result-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(255, 248, 233, 0.04);
+}
+
+.search-answer :deep(p) {
+  line-height: 1.85;
+}
+
+.source-list {
+  margin-top: 18px;
+}
+
 .content-section {
   margin-top: 30px;
 }
@@ -213,10 +305,6 @@ onMounted(loadData);
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-.refined-heading h2 {
-  letter-spacing: -0.03em;
 }
 
 .sidebar-card {
@@ -249,18 +337,14 @@ onMounted(loadData);
   font-size: 0.8rem;
 }
 
-.rag-link:hover {
-  background: rgba(220, 193, 136, 0.2);
-  border-color: var(--line-strong);
-}
-
 .all-link {
   letter-spacing: 0.08em;
   font-size: 0.82rem;
 }
 
 @media (max-width: 960px) {
-  .hero-panel {
+  .hero-panel,
+  .search-row {
     grid-template-columns: 1fr;
   }
 }

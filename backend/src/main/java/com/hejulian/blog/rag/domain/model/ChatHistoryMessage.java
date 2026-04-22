@@ -12,6 +12,7 @@ public record ChatHistoryMessage(
         String mode,
         List<Integer> citations,
         List<RagDtos.Source> sources,
+        List<RagDtos.AnswerVariant> variants,
         LocalDateTime createdAt,
         Boolean feedbackHelpful,
         String feedbackNote,

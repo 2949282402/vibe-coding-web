@@ -26,7 +26,7 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiresAdmin: true },
     children: [
       { path: '', redirect: '/admin/dashboard' },
       { path: 'dashboard', name: 'admin-dashboard', component: () => import('../views/admin/DashboardView.vue') },
@@ -51,8 +51,11 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } };
   }
+  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    return { name: 'home' };
+  }
   if (to.name === 'login' && authStore.isAuthenticated) {
-    return { name: 'admin-dashboard' };
+    return authStore.isAdmin ? { name: 'admin-dashboard' } : { name: 'home' };
   }
   return true;
 });

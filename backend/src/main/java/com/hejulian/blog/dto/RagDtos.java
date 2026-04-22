@@ -69,6 +69,16 @@ public final class RagDtos {
     ) {
     }
 
+    public record AnswerVariant(
+            String question,
+            String answer,
+            String mode,
+            List<Integer> citations,
+            List<Source> sources,
+            LocalDateTime createdAt
+    ) {
+    }
+
     public record ChatMessage(
             Long id,
             String role,
@@ -76,6 +86,7 @@ public final class RagDtos {
             String mode,
             List<Integer> citations,
             List<Source> sources,
+            List<AnswerVariant> variants,
             LocalDateTime createdAt,
             Boolean feedbackHelpful,
             String feedbackNote,
@@ -86,6 +97,14 @@ public final class RagDtos {
     public record HistoryResponse(
             String sessionId,
             List<ChatMessage> messages
+    ) {
+    }
+
+    public record SearchResponse(
+            String question,
+            String answer,
+            List<String> followUpQuestions,
+            List<Source> sources
     ) {
     }
 

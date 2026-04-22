@@ -1,21 +1,42 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { fetchPostDetailApi, submitCommentApi } from '../api/blog';
 import { renderMarkdown } from '../utils/markdown';
+import { useAuthStore } from '../stores/auth';
 import { usePreferencesStore } from '../stores/preferences';
 
 const preferences = usePreferencesStore();
+const authStore = useAuthStore();
 const route = useRoute();
+const router = useRouter();
 const loading = ref(true);
 const post = ref(null);
 const commentForm = ref({
   postId: null,
-  nickname: '',
-  email: '',
   content: ''
 });
+
+const copy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        discussion: '评论交流',
+        replyTitle: '登录后发表评论',
+        replyBody: '文章可以直接查看，但发表评论需要先登录账号。',
+        goLogin: '去登录',
+        currentUser: '当前账号',
+        submitSuccess: '评论已提交，等待审核'
+      }
+    : {
+        discussion: 'Discussion',
+        replyTitle: 'Sign in to comment',
+        replyBody: 'Reading is public, but posting comments requires an account.',
+        goLogin: 'Sign In',
+        currentUser: 'Current Account',
+        submitSuccess: 'Comment submitted for moderation'
+      }
+);
 
 const renderedContent = computed(() => renderMarkdown(post.value?.content || ''));
 
@@ -39,10 +60,12 @@ const loadPost = async () => {
 
 const submitComment = async () => {
   await submitCommentApi(commentForm.value);
-  ElMessage.success(preferences.t('post.commentSubmitted'));
-  commentForm.value.nickname = '';
-  commentForm.value.email = '';
+  ElMessage.success(copy.value.submitSuccess);
   commentForm.value.content = '';
+};
+
+const goLogin = () => {
+  router.push({ name: 'login', query: { redirect: route.fullPath } });
 };
 
 watch(() => route.params.slug, loadPost);
@@ -88,7 +111,7 @@ onMounted(loadPost);
     <section class="section-card comment-panel">
       <div class="section-heading comment-heading">
         <div>
-          <span class="comment-kicker muted">Discussion</span>
+          <span class="comment-kicker muted">{{ copy.discussion }}</span>
           <h2>{{ preferences.t('post.commentsTitle') }}</h2>
         </div>
         <span class="muted">{{ preferences.t('post.comments', { count: post.comments.length }) }}</span>
@@ -102,20 +125,20 @@ onMounted(loadPost);
         class="comment-alert"
       />
 
+      <template v-else-if="!authStore.isAuthenticated">
+        <div class="comment-login-card">
+          <strong>{{ copy.replyTitle }}</strong>
+          <p class="muted">{{ copy.replyBody }}</p>
+          <el-button type="primary" @click="goLogin">{{ copy.goLogin }}</el-button>
+        </div>
+      </template>
+
       <el-form v-else class="comment-form" label-position="top" @submit.prevent="submitComment">
         <div class="comment-form-head">
           <div>
-            <strong>Leave a reply</strong>
-            <p class="muted">Share follow-up thoughts without leaving the article context.</p>
+            <strong>{{ copy.currentUser }}</strong>
+            <p class="muted">{{ authStore.user?.displayName }} / {{ authStore.user?.email }}</p>
           </div>
-        </div>
-        <div class="form-grid">
-          <el-form-item :label="preferences.t('post.nickname')">
-            <el-input v-model="commentForm.nickname" :placeholder="preferences.t('post.nicknamePlaceholder')" />
-          </el-form-item>
-          <el-form-item :label="preferences.t('post.email')">
-            <el-input v-model="commentForm.email" :placeholder="preferences.t('post.emailPlaceholder')" />
-          </el-form-item>
         </div>
         <el-form-item :label="preferences.t('post.comment')">
           <el-input
@@ -249,7 +272,8 @@ h1 {
   margin: 8px 0 0;
 }
 
-.comment-form {
+.comment-form,
+.comment-login-card {
   margin: 20px 0 30px;
   padding: 24px;
   border-radius: 24px;
@@ -257,7 +281,10 @@ h1 {
   background:
     linear-gradient(180deg, rgba(255, 248, 233, 0.05), rgba(255, 248, 233, 0.02)),
     rgba(23, 20, 16, 0.96);
-  box-shadow: inset 0 1px 0 rgba(255, 248, 233, 0.04);
+}
+
+.comment-login-card p {
+  margin: 8px 0 16px;
 }
 
 .comment-form-head {
@@ -275,12 +302,6 @@ h1 {
 
 .comment-alert {
   margin: 16px 0 28px;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
 }
 
 .comment-actions {
@@ -366,10 +387,6 @@ h1 {
   .article-panel,
   .comment-panel {
     padding: 22px;
-  }
-
-  .form-grid {
-    grid-template-columns: 1fr;
   }
 
   .comment-head {

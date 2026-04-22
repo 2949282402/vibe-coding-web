@@ -32,6 +32,8 @@ public interface KnowledgeBaseRepository {
 
     ChatHistoryMessage updateConversationFeedback(String sessionId, Long messageId, Boolean helpful, String note);
 
+    ChatHistoryMessage updateConversationVariants(String sessionId, Long messageId, List<com.hejulian.blog.dto.RagDtos.AnswerVariant> variants);
+
     void deleteConversationMessagesFrom(String sessionId, Long fromMessageId);
 
     ConversationSession findConversationSession(String sessionId);

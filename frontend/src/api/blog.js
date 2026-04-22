@@ -5,6 +5,8 @@ export const fetchPostListApi = (params) => http.get('/public/posts', { params }
 export const fetchPostDetailApi = (slug, trackView = true) =>
   http.get(`/public/posts/${slug}`, { params: { trackView } });
 export const submitCommentApi = (payload) => http.post('/public/comments', payload);
+export const searchKnowledgePublicApi = (question) =>
+  http.get('/public/rag/search', { params: { question } });
 export const fetchKnowledgeHistoryApi = (sessionId) =>
   http.get('/public/rag/history', { params: { sessionId } });
 export const fetchKnowledgeSessionsApi = (includeDeleted = true) =>
@@ -22,10 +24,12 @@ export const askKnowledgeApi = (payload) => http.post('/public/rag/ask', payload
 export const replayKnowledgeApi = (payload) => http.post('/public/rag/replay', payload, { timeout: 300000 });
 
 export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
+  const token = localStorage.getItem('blog-auth-token') || localStorage.getItem('blog-admin-token');
   const response = await fetch('/api/public/rag/ask/stream', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
     },
     body: JSON.stringify(payload),
     signal: handlers.signal

@@ -1,28 +1,86 @@
 <script setup>
-import { reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { loginApi } from '../api/auth';
+import { loginApi, registerApi } from '../api/auth';
 import AppControls from '../components/AppControls.vue';
 import { useAuthStore } from '../stores/auth';
 import { usePreferencesStore } from '../stores/preferences';
 
 const preferences = usePreferencesStore();
-const form = reactive({
-  username: 'admin',
-  password: 'Admin123!'
-});
-
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const activeTab = ref('login');
 
-const login = async () => {
-  const res = await loginApi(form);
+const loginForm = reactive({
+  username: '',
+  password: ''
+});
+
+const registerForm = reactive({
+  username: '',
+  email: '',
+  displayName: '',
+  password: ''
+});
+
+const copy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        title: '账号登录',
+        subtitle: '登录后才能发表评论、发起 RAG 对话，并配置你的千问 Key。',
+        login: '登录',
+        register: '注册',
+        username: '用户名',
+        email: '邮箱',
+        displayName: '显示名称',
+        password: '密码',
+        signIn: '立即登录',
+        signUp: '注册并登录',
+        backToSite: '返回网站',
+        loginSuccess: '登录成功',
+        registerSuccess: '注册成功',
+        passwordHint: '密码至少 8 位'
+      }
+    : {
+        title: 'Account Access',
+        subtitle: 'Sign in to comment, start RAG chats, and configure your Qwen API key.',
+        login: 'Sign In',
+        register: 'Register',
+        username: 'Username',
+        email: 'Email',
+        displayName: 'Display Name',
+        password: 'Password',
+        signIn: 'Sign In',
+        signUp: 'Create Account',
+        backToSite: 'Back to Site',
+        loginSuccess: 'Login successful',
+        registerSuccess: 'Register successful',
+        passwordHint: 'Password must be at least 8 characters'
+      }
+);
+
+function resolveRedirect() {
+  if (typeof route.query.redirect === 'string' && route.query.redirect) {
+    return route.query.redirect;
+  }
+  return authStore.isAdmin ? '/admin/dashboard' : '/';
+}
+
+async function login() {
+  const res = await loginApi(loginForm);
   authStore.setSession(res.data);
-  ElMessage.success(preferences.t('login.loginSuccess'));
-  router.push(route.query.redirect || '/admin/dashboard');
-};
+  ElMessage.success(copy.value.loginSuccess);
+  router.push(resolveRedirect());
+}
+
+async function register() {
+  const res = await registerApi(registerForm);
+  authStore.setSession(res.data);
+  ElMessage.success(copy.value.registerSuccess);
+  router.push(resolveRedirect());
+}
 </script>
 
 <template>
@@ -33,20 +91,57 @@ const login = async () => {
 
     <div class="login-card section-card">
       <div>
-        <span class="hero-kicker">{{ preferences.t('login.adminAccess') }}</span>
-        <h1>{{ preferences.t('login.enterConsole') }}</h1>
-        <p class="muted login-copy">{{ preferences.t('login.defaultAccount') }}</p>
+        <span class="hero-kicker">Account</span>
+        <h1>{{ copy.title }}</h1>
+        <p class="muted login-copy">{{ copy.subtitle }}</p>
       </div>
 
-      <el-form label-position="top" @submit.prevent="login">
-        <el-form-item :label="preferences.t('login.username')">
-          <el-input v-model="form.username" />
+      <div class="tab-row">
+        <button
+          type="button"
+          class="tab-btn"
+          :class="{ active: activeTab === 'login' }"
+          @click="activeTab = 'login'"
+        >
+          {{ copy.login }}
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
+          :class="{ active: activeTab === 'register' }"
+          @click="activeTab = 'register'"
+        >
+          {{ copy.register }}
+        </button>
+      </div>
+
+      <el-form v-if="activeTab === 'login'" label-position="top" @submit.prevent="login">
+        <el-form-item :label="copy.username">
+          <el-input v-model="loginForm.username" />
         </el-form-item>
-        <el-form-item :label="preferences.t('login.password')">
-          <el-input v-model="form.password" type="password" show-password />
+        <el-form-item :label="copy.password">
+          <el-input v-model="loginForm.password" type="password" show-password />
         </el-form-item>
-        <el-button type="primary" class="full" @click="login">{{ preferences.t('login.signIn') }}</el-button>
-        <el-button class="full plain" @click="$router.push('/')">{{ preferences.t('login.backToSite') }}</el-button>
+        <el-button type="primary" class="full" @click="login">{{ copy.signIn }}</el-button>
+        <el-button class="full plain" @click="$router.push('/')">{{ copy.backToSite }}</el-button>
+      </el-form>
+
+      <el-form v-else label-position="top" @submit.prevent="register">
+        <el-form-item :label="copy.username">
+          <el-input v-model="registerForm.username" />
+        </el-form-item>
+        <el-form-item :label="copy.email">
+          <el-input v-model="registerForm.email" />
+        </el-form-item>
+        <el-form-item :label="copy.displayName">
+          <el-input v-model="registerForm.displayName" />
+        </el-form-item>
+        <el-form-item :label="copy.password">
+          <el-input v-model="registerForm.password" type="password" show-password />
+          <p class="muted password-hint">{{ copy.passwordHint }}</p>
+        </el-form-item>
+        <el-button type="primary" class="full" @click="register">{{ copy.signUp }}</el-button>
+        <el-button class="full plain" @click="$router.push('/')">{{ copy.backToSite }}</el-button>
       </el-form>
     </div>
   </div>
@@ -77,7 +172,7 @@ html[data-theme='light'] .login-shell {
 }
 
 .login-card {
-  width: min(500px, 100%);
+  width: min(560px, 100%);
   padding: 40px;
 }
 
@@ -90,11 +185,29 @@ h1 {
   margin: 0 0 10px;
   font-size: clamp(2.2rem, 6vw, 2.8rem);
   letter-spacing: -0.05em;
-  text-transform: none;
 }
 
-.login-card :deep(.el-form) {
-  margin-top: 22px;
+.tab-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 22px 0 18px;
+}
+
+.tab-btn {
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.tab-btn.active {
+  color: var(--text-main);
+  background: var(--bg-panel-strong);
+  border-color: var(--line-strong);
 }
 
 .full {
@@ -104,6 +217,11 @@ h1 {
 
 .plain {
   margin-left: 0;
+}
+
+.password-hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
 }
 
 @media (max-width: 720px) {

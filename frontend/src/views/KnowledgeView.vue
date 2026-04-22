@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { fetchQwenConfigApi, saveQwenConfigApi } from '../api/auth';
 import {
   askKnowledgeApi,
   askKnowledgeStreamApi,
@@ -15,17 +16,22 @@ import {
   submitKnowledgeFeedbackApi
 } from '../api/blog';
 import { renderMarkdown } from '../utils/markdown';
+import { useAuthStore } from '../stores/auth';
 import { usePreferencesStore } from '../stores/preferences';
 
 const STORAGE_SESSION_KEY = 'blog-rag-session-id';
 const STORAGE_SEARCH_MODE_KEY = 'blog-rag-search-mode';
+const STORAGE_SESSION_LIST_CACHE_PREFIX = 'blog-rag-session-list-cache';
+const STORAGE_HISTORY_CACHE_PREFIX = 'blog-rag-history-cache';
 const DEFAULT_TOP_K = 4;
 const SCROLL_STICKY_THRESHOLD = 96;
 const SOURCE_PREVIEW_LIMIT = 4;
+const LOCAL_CACHE_TTL = 5 * 60 * 1000;
 const SEARCH_MODE_LOCAL_ONLY = 'LOCAL_ONLY';
 const SEARCH_MODE_LOCAL_AND_WEB = 'LOCAL_AND_WEB';
 
 const preferences = usePreferencesStore();
+const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const sessions = ref([]);
@@ -40,6 +46,7 @@ const pendingTurn = ref(null);
 const feedbackSubmittingId = ref(null);
 const editingMessageId = ref(null);
 const editingMessageContent = ref('');
+const answerVariantSelections = ref({});
 const searchMode = ref(readSearchMode());
 const activeSessionId = ref(readSessionId());
 const activeSourceMessageId = ref(null);
@@ -50,6 +57,16 @@ const sidebarCollapsed = ref(typeof window !== 'undefined' ? window.innerWidth <
 const sidebarDrawerOpen = ref(false);
 const conversationViewport = ref(null);
 const shouldStickToBottom = ref(true);
+const qwenConfigLoading = ref(false);
+const qwenSaving = ref(false);
+const qwenConfig = ref({
+  hasApiKey: false,
+  selectedModel: '',
+  webSearchEnabled: false,
+  models: []
+});
+const qwenApiKeyInput = ref('');
+const qwenApiKeyEditorVisible = ref(false);
 
 let activeController = null;
 
@@ -92,6 +109,102 @@ function createSessionId() {
     `rag-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
   localStorage.setItem(STORAGE_SESSION_KEY, generated);
   return generated;
+}
+
+function getCacheUserScope() {
+  return String(authStore.user?.id || authStore.user?.username || '').trim();
+}
+
+function buildSessionListCacheKey() {
+  const scope = getCacheUserScope();
+  return scope ? `${STORAGE_SESSION_LIST_CACHE_PREFIX}:${scope}` : '';
+}
+
+function buildHistoryCacheKey(sessionId) {
+  const scope = getCacheUserScope();
+  const normalizedSessionId = normalizeSessionId(sessionId);
+  return scope && normalizedSessionId ? `${STORAGE_HISTORY_CACHE_PREFIX}:${scope}:${normalizedSessionId}` : '';
+}
+
+function readLocalCache(key) {
+  if (!key) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    const savedAt = Number(parsed.savedAt || 0);
+    if (!savedAt || Date.now() - savedAt > LOCAL_CACHE_TTL) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function writeLocalCache(key, value) {
+  if (!key) {
+    return;
+  }
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      savedAt: Date.now(),
+      value
+    })
+  );
+}
+
+function persistSessionsCache() {
+  if (!authStore.isAuthenticated) {
+    return;
+  }
+  writeLocalCache(buildSessionListCacheKey(), Array.isArray(sessions.value) ? sessions.value : []);
+}
+
+function restoreSessionsCache() {
+  if (!authStore.isAuthenticated) {
+    return false;
+  }
+  const cached = readLocalCache(buildSessionListCacheKey());
+  if (!Array.isArray(cached?.value) || !cached.value.length) {
+    return false;
+  }
+  sessions.value = cached.value;
+  return true;
+}
+
+function persistHistoryCache(sessionId, messages = history.value) {
+  if (!authStore.isAuthenticated) {
+    return;
+  }
+  const normalizedSessionId = normalizeSessionId(sessionId);
+  if (!normalizedSessionId) {
+    return;
+  }
+  writeLocalCache(buildHistoryCacheKey(normalizedSessionId), Array.isArray(messages) ? messages : []);
+}
+
+function restoreHistoryCache(sessionId) {
+  if (!authStore.isAuthenticated) {
+    return false;
+  }
+  const normalizedSessionId = normalizeSessionId(sessionId);
+  if (!normalizedSessionId) {
+    return false;
+  }
+  const cached = readLocalCache(buildHistoryCacheKey(normalizedSessionId));
+  if (!Array.isArray(cached?.value) || !cached.value.length) {
+    return false;
+  }
+  history.value = cached.value;
+  result.value = null;
+  return true;
 }
 
 const copy = computed(() => {
@@ -282,6 +395,49 @@ function renderAssistantContent(message) {
   });
 }
 
+function messageVariants(message) {
+  if (message?.role !== 'assistant') {
+    return [];
+  }
+  const baseVariant = {
+    question: '',
+    answer: message.content || '',
+    mode: message.mode || null,
+    citations: Array.isArray(message.citations) ? message.citations : [],
+    sources: Array.isArray(message.sources) ? message.sources : [],
+    createdAt: message.createdAt || null
+  };
+  const extraVariants = Array.isArray(message?.variants) ? message.variants : [];
+  return [baseVariant, ...extraVariants];
+}
+
+function getSelectedVariantIndex(message) {
+  const variants = messageVariants(message);
+  if (!variants.length) {
+    return 0;
+  }
+  const selected = Number(answerVariantSelections.value[message.id]);
+  if (Number.isInteger(selected) && selected >= 0 && selected < variants.length) {
+    return selected;
+  }
+  return variants.length - 1;
+}
+
+function getSelectedAssistantVariant(message) {
+  const variants = messageVariants(message);
+  if (!variants.length) {
+    return null;
+  }
+  return variants[getSelectedVariantIndex(message)] || null;
+}
+
+function selectAnswerVariant(messageId, index) {
+  answerVariantSelections.value = {
+    ...answerVariantSelections.value,
+    [messageId]: index
+  };
+}
+
 const activeSession = computed(() =>
   sessions.value.find((item) => item.sessionId === activeSessionId.value && !item.deleted) || null
 );
@@ -299,6 +455,43 @@ const searchModeOptions = computed(() => [
     label: copy.value.searchModeHybrid
   }
 ]);
+const canUseHybridSearch = computed(() => Boolean(qwenConfig.value.webSearchEnabled));
+const qwenCopy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        loginRequired: '登录后才能发起对话',
+        loginHint: '当前 RAG 聊天需要账号登录，未登录时仍可浏览文章。',
+        goLogin: '去登录',
+        configTitle: '配置千问 API Key',
+        configHint: '需要先填写你的千问 API Key，系统会自动解析可用模型，并判断是否支持联网搜索。',
+        apiKey: '千问 API Key',
+        apiKeyPlaceholder: '请输入你的千问 API Key',
+        saveConfig: '保存并解析',
+        model: '对话模型',
+        localOnlyLocked: '当前模型不支持联网搜索，已强制使用仅站内检索',
+        noModels: '保存 Key 后会显示可用模型列表',
+        saved: '配置已保存',
+        editApiKey: '修改 API Key',
+        cancelEditApiKey: '取消修改'
+      }
+    : {
+        loginRequired: 'Sign in required',
+        loginHint: 'RAG chat requires an account, while articles remain public.',
+        goLogin: 'Sign In',
+        configTitle: 'Configure Qwen API Key',
+        configHint: 'Enter your Qwen API key to detect available models and web-search support.',
+        apiKey: 'Qwen API Key',
+        apiKeyPlaceholder: 'Enter your Qwen API key',
+        saveConfig: 'Save and Detect',
+        model: 'Chat Model',
+        localOnlyLocked: 'This model does not support web search, so local retrieval is enforced.',
+        noModels: 'Available models will appear after the key is saved',
+        saved: 'Configuration saved',
+        editApiKey: 'Update API Key',
+        cancelEditApiKey: 'Cancel'
+      }
+);
+const hasQwenConfig = computed(() => Boolean(qwenConfig.value.hasApiKey && qwenConfig.value.selectedModel));
 const hasConversation = computed(
   () => history.value.length > 0 || Boolean(pendingTurn.value?.question) || streaming.value || Boolean(result.value?.answer)
 );
@@ -356,12 +549,41 @@ const pendingAssistantMessage = computed(() => {
 });
 
 const timelineMessages = computed(() => {
-  const messages = history.value.map((message) => ({
-    ...message,
-    renderedContent: message.role === 'assistant' ? renderAssistantContent(message) : message.content || '',
-    pending: false,
-    skeleton: false
-  }));
+  const messages = history.value.map((message, index, rawMessages) => {
+    if (message.role === 'assistant') {
+      const variant = getSelectedAssistantVariant(message);
+      const content = variant?.answer || message.content || '';
+      const sources = Array.isArray(variant?.sources) ? variant.sources : Array.isArray(message.sources) ? message.sources : [];
+      const citations = Array.isArray(variant?.citations) ? variant.citations : Array.isArray(message.citations) ? message.citations : [];
+      return {
+        ...message,
+        content,
+        mode: variant?.mode || message.mode || null,
+        sources,
+        citations,
+        selectedVariantIndex: getSelectedVariantIndex(message),
+        variantCount: messageVariants(message).length,
+        renderedContent: renderAssistantContent({
+          ...message,
+          content,
+          sources
+        }),
+        pending: false,
+        skeleton: false
+      };
+    }
+
+    const pairedAssistant = rawMessages[index + 1]?.role === 'assistant' ? rawMessages[index + 1] : null;
+    const pairedVariant = pairedAssistant ? getSelectedAssistantVariant(pairedAssistant) : null;
+    const content = pairedVariant?.question || message.content || '';
+    return {
+      ...message,
+      content,
+      renderedContent: content,
+      pending: false,
+      skeleton: false
+    };
+  });
 
   const pending = pendingTurn.value;
   const lastUser = [...messages].reverse().find((message) => message.role === 'user');
@@ -420,6 +642,18 @@ const messageActionCopy = computed(() => {
   };
 });
 
+const answerVariantCopy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        title: '回答版本',
+        label: '结果 {index}'
+      }
+    : {
+        title: 'Answer versions',
+        label: 'Result {index}'
+      }
+);
+
 const assistantMessagesWithSources = computed(() =>
   timelineMessages.value.filter(
     (message) => message.role === 'assistant' && !message.skeleton && Array.isArray(message.sources) && message.sources.length
@@ -432,14 +666,8 @@ const latestAssistantTimelineMessageId = computed(
 
 const latestSourceMessageId = computed(() => assistantMessagesWithSources.value.at(-1)?.id || null);
 
-const activeSourceMessage = computed(() => {
-  const activeId = activeSourceMessageId.value;
-  return (
-    assistantMessagesWithSources.value.find((message) => message.id === activeId) ||
-    assistantMessagesWithSources.value.at(-1) ||
-    null
-  );
-});
+const latestSourceMessage = computed(() => assistantMessagesWithSources.value.at(-1) || null);
+const activeSourceMessage = computed(() => latestSourceMessage.value);
 
 const latestSources = computed(() => activeSourceMessage.value?.sources || []);
 const blogSources = computed(() => latestSources.value.filter((source) => !isWebSource(source)));
@@ -450,24 +678,6 @@ const visibleBlogSources = computed(() =>
 const visibleWebSources = computed(() =>
   webSourcesExpanded.value ? webSources.value : webSources.value.slice(0, SOURCE_PREVIEW_LIMIT)
 );
-
-const composerStatus = computed(() => {
-  if (sessionsLoading.value) {
-    return copy.value.sessionLoading;
-  }
-
-  if (streaming.value) {
-    return copy.value.streaming;
-  }
-
-  if (result.value) {
-    return copy.value
-      .indexed.replace('{posts}', result.value.indexedPosts)
-      .replace('{chunks}', result.value.indexedChunks);
-  }
-
-  return copy.value.composerHint;
-});
 
 function formatSessionTime(value) {
   if (!value) {
@@ -597,6 +807,9 @@ async function retryAssistantMessage(message) {
 }
 
 async function replayConversation(messageId, questionOverride = '') {
+  if (!authStore.isAuthenticated || !hasQwenConfig.value) {
+    return;
+  }
   if (!messageId) {
     return;
   }
@@ -655,12 +868,39 @@ async function jumpToCitationSource(messageId, citationIndex) {
     return;
   }
 
-  setActiveSourceMessage(messageId);
+  if (messageId !== latestSourceMessageId.value) {
+    const source = resolveMessageSource(messageId, citationIndex);
+    openSourceInNewWindow(source);
+    return;
+  }
+
   await nextTick();
   const target = document.getElementById(citationAnchorId(messageId, citationIndex));
   if (target) {
     target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+}
+
+function resolveMessageSource(messageId, citationIndex) {
+  const ownerMessage = assistantMessagesWithSources.value.find((message) => message.id === messageId);
+  return ownerMessage?.sources?.find((source) => source.citationIndex === citationIndex) || null;
+}
+
+function openSourceInNewWindow(source) {
+  if (!source || typeof window === 'undefined') {
+    return;
+  }
+
+  if (isWebSource(source)) {
+    const href = source.url || '';
+    if (href) {
+      window.open(href, '_blank', 'noopener,noreferrer');
+    }
+    return;
+  }
+
+  const resolved = router.resolve(source.slug ? `/posts/${source.slug}` : '/archives');
+  window.open(resolved.href, '_blank', 'noopener,noreferrer');
 }
 
 function handleComposerKeydown(event) {
@@ -720,7 +960,7 @@ function handleConversationClick(event) {
   const citationLink = event.target.closest('.citation-link');
   if (!citationLink) {
     const sourceOwner = event.target.closest('[data-source-owner]');
-    if (sourceOwner?.dataset.sourceOwner) {
+    if (sourceOwner?.dataset.sourceOwner === String(latestSourceMessageId.value || '')) {
       setActiveSourceMessage(sourceOwner.dataset.sourceOwner);
     }
     return;
@@ -797,6 +1037,7 @@ function applyResponse(response, options = {}) {
   const { clearPending = false } = options;
   result.value = response;
   history.value = response.history || [];
+  persistHistoryCache(response?.sessionId || activeSessionId.value, history.value);
   if (response?.searchMode) {
     searchMode.value = normalizeSearchMode(response.searchMode);
     persistSearchMode();
@@ -825,6 +1066,7 @@ function patchMessageFeedback(messageId, feedback) {
   };
 
   history.value = history.value.map(patch);
+  persistHistoryCache(activeSessionId.value, history.value);
   if (result.value?.history?.length) {
     result.value = {
       ...result.value,
@@ -887,10 +1129,15 @@ async function submitAnswerFeedback(message, helpful) {
 }
 
 async function loadSessions() {
+  if (!authStore.isAuthenticated) {
+    sessions.value = [];
+    return;
+  }
   sessionsLoading.value = true;
   try {
     const res = await fetchKnowledgeSessionsApi(true);
     sessions.value = res.data.sessions || [];
+    persistSessionsCache();
   } catch (error) {
     ElMessage.warning(error?.message || copy.value.sessionsFailed);
   } finally {
@@ -899,21 +1146,112 @@ async function loadSessions() {
 }
 
 async function loadHistory(sessionToLoad = activeSessionId.value) {
+  if (!authStore.isAuthenticated) {
+    history.value = [];
+    result.value = null;
+    return;
+  }
+  const restoredFromCache = restoreHistoryCache(sessionToLoad);
   historyLoading.value = true;
   result.value = null;
   clearPendingTurn();
   cancelEditMessage();
+  let loaded = false;
 
   try {
     const res = await fetchKnowledgeHistoryApi(sessionToLoad);
     history.value = res.data.messages || [];
-    await scrollConversationToBottom(true);
+    persistHistoryCache(sessionToLoad, history.value);
+    loaded = true;
   } catch (error) {
-    history.value = [];
-    ElMessage.warning(error?.message || copy.value.historyFailed);
+    if (!restoredFromCache) {
+      history.value = [];
+      ElMessage.warning(error?.message || copy.value.historyFailed);
+    }
   } finally {
     historyLoading.value = false;
+    if (loaded || restoredFromCache) {
+      await scrollConversationToBottom(true);
+    }
   }
+}
+
+async function loadQwenConfig() {
+  if (!authStore.isAuthenticated) {
+    qwenConfig.value = {
+      hasApiKey: false,
+      selectedModel: '',
+      webSearchEnabled: false,
+      models: []
+    };
+    return;
+  }
+
+  qwenConfigLoading.value = true;
+  try {
+    const res = await fetchQwenConfigApi();
+    qwenConfig.value = res.data || {
+      hasApiKey: false,
+      selectedModel: '',
+      webSearchEnabled: false,
+      models: []
+    };
+    if (!qwenConfig.value.webSearchEnabled && searchMode.value === SEARCH_MODE_LOCAL_AND_WEB) {
+      searchMode.value = SEARCH_MODE_LOCAL_ONLY;
+    }
+  } catch (error) {
+    qwenConfig.value = {
+      hasApiKey: false,
+      selectedModel: '',
+      webSearchEnabled: false,
+      models: []
+    };
+  } finally {
+    qwenConfigLoading.value = false;
+  }
+}
+
+async function saveQwenConfig(selectedModel = '') {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } });
+    return;
+  }
+
+  qwenSaving.value = true;
+  try {
+    const hasNewApiKey = Boolean(qwenApiKeyInput.value.trim());
+    const res = await saveQwenConfigApi({
+      apiKey: qwenApiKeyInput.value.trim() || undefined,
+      selectedModel: selectedModel || (hasNewApiKey ? undefined : qwenConfig.value.selectedModel || undefined)
+    });
+    qwenConfig.value = res.data;
+    authStore.user = {
+      ...authStore.user,
+      hasQwenApiKey: res.data.hasApiKey,
+      qwenChatModel: res.data.selectedModel,
+      qwenWebSearchEnabled: res.data.webSearchEnabled
+    };
+    localStorage.setItem('blog-auth-user', JSON.stringify(authStore.user));
+    qwenApiKeyInput.value = '';
+    qwenApiKeyEditorVisible.value = false;
+    if (!res.data.webSearchEnabled) {
+      searchMode.value = SEARCH_MODE_LOCAL_ONLY;
+    }
+    ElMessage.success(qwenCopy.value.saved);
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || error?.message || 'Request failed');
+  } finally {
+    qwenSaving.value = false;
+  }
+}
+
+function showQwenApiKeyEditor() {
+  qwenApiKeyEditorVisible.value = true;
+}
+
+function hideQwenApiKeyEditor() {
+  qwenApiKeyEditorVisible.value = false;
+  qwenApiKeyInput.value = '';
 }
 
 function createEmptyResult(normalizedQuestion) {
@@ -1007,6 +1345,15 @@ async function runStreamRequest(normalizedQuestion) {
 }
 
 async function submitQuestion(presetQuestion = '') {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } });
+    return;
+  }
+  if (!hasQwenConfig.value) {
+    ElMessage.warning(qwenCopy.value.configHint);
+    return;
+  }
+
   const normalizedQuestion = String(presetQuestion || question.value).trim();
   if (!normalizedQuestion) {
     return;
@@ -1171,15 +1518,7 @@ watch(
 watch(
   latestSourceMessageId,
   (value) => {
-    if (!value) {
-      activeSourceMessageId.value = null;
-      return;
-    }
-
-    const stillExists = assistantMessagesWithSources.value.some((message) => message.id === activeSourceMessageId.value);
-    if (!stillExists) {
-      activeSourceMessageId.value = value;
-    }
+    activeSourceMessageId.value = value || null;
   },
   { immediate: true }
 );
@@ -1195,6 +1534,15 @@ watch(
 watch(searchMode, () => {
   persistSearchMode();
 });
+
+watch(
+  () => qwenConfig.value.webSearchEnabled,
+  (enabled) => {
+    if (!enabled && searchMode.value === SEARCH_MODE_LOCAL_AND_WEB) {
+      searchMode.value = SEARCH_MODE_LOCAL_ONLY;
+    }
+  }
+);
 
 watch(
   () => route.query.sessionId,
@@ -1214,13 +1562,22 @@ watch(
 onMounted(async () => {
   syncResponsiveLayout();
   window.addEventListener('resize', syncResponsiveLayout);
+  if (!authStore.isAuthenticated) {
+    await loadQwenConfig();
+    return;
+  }
+  restoreSessionsCache();
+  const qwenConfigPromise = loadQwenConfig();
   await loadSessions();
   if (!sessions.value.some((item) => item.sessionId === activeSessionId.value && !item.deleted) && visibleSessions.value.length) {
     activeSessionId.value = visibleSessions.value[0].sessionId;
     persistActiveSession();
   }
   syncRouteSession(activeSessionId.value);
-  await loadHistory(activeSessionId.value);
+  await Promise.all([
+    loadHistory(activeSessionId.value),
+    qwenConfigPromise
+  ]);
 });
 
 onBeforeUnmount(() => {
@@ -1473,6 +1830,22 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
 
+                <div v-if="message.variantCount > 1" class="answer-variants">
+                  <span class="answer-variants-label muted">{{ answerVariantCopy.title }}</span>
+                  <div class="answer-variants-list">
+                    <button
+                      v-for="index in message.variantCount"
+                      :key="`${message.id}-variant-${index - 1}`"
+                      type="button"
+                      class="answer-variant-chip"
+                      :class="{ active: message.selectedVariantIndex === index - 1 }"
+                      @click="selectAnswerVariant(message.id, index - 1)"
+                    >
+                      {{ answerVariantCopy.label.replace('{index}', index) }}
+                    </button>
+                  </div>
+                </div>
+
                 <div v-if="shouldShowInlineSources(message)" class="inline-sources">
                   <span class="inline-sources-label muted">{{ copy.sourcesTitle }}</span>
                   <div class="inline-source-list">
@@ -1553,11 +1926,51 @@ onBeforeUnmount(() => {
 
       <footer class="composer-shell">
         <div class="composer-card" :class="{ 'is-busy': loading }">
-          <div class="composer-card-top">
-            <div class="composer-card-top-left">
-              <span class="composer-badge">{{ copy.strictCitation }}</span>
-              <div class="search-mode-group">
-                <span class="search-mode-label">{{ copy.searchModeTitle }}</span>
+          <div v-if="!authStore.isAuthenticated" class="qwen-config-panel">
+            <strong>{{ qwenCopy.loginRequired }}</strong>
+            <p class="muted">{{ qwenCopy.loginHint }}</p>
+            <el-button type="primary" @click="router.push({ name: 'login', query: { redirect: route.fullPath } })">
+              {{ qwenCopy.goLogin }}
+            </el-button>
+          </div>
+
+          <div v-else-if="!hasQwenConfig" class="qwen-config-panel">
+            <strong>{{ qwenCopy.configTitle }}</strong>
+            <p class="muted">{{ qwenCopy.configHint }}</p>
+            <el-input
+              v-model="qwenApiKeyInput"
+              type="textarea"
+              resize="none"
+              :rows="3"
+              :placeholder="qwenCopy.apiKeyPlaceholder"
+            />
+            <div class="qwen-config-actions">
+              <el-button type="primary" :loading="qwenSaving || qwenConfigLoading" @click="saveQwenConfig()">
+                {{ qwenCopy.saveConfig }}
+              </el-button>
+            </div>
+            <p class="muted">{{ qwenCopy.noModels }}</p>
+          </div>
+
+          <div v-else class="qwen-config-panel compact">
+            <div class="composer-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">{{ qwenCopy.model }}</span>
+                <el-select
+                  :model-value="qwenConfig.selectedModel"
+                  class="qwen-model-select"
+                  @change="saveQwenConfig"
+                >
+                  <el-option
+                    v-for="model in qwenConfig.models"
+                    :key="model.model"
+                    :label="model.model"
+                    :value="model.model"
+                  />
+                </el-select>
+              </div>
+              <div class="toolbar-group search-mode-group">
+                <span class="toolbar-label">{{ copy.searchModeTitle }}</span>
                 <div class="search-mode-picker" :aria-label="copy.searchModeTitle" role="group">
                   <button
                     v-for="option in searchModeOptions"
@@ -1567,7 +1980,7 @@ onBeforeUnmount(() => {
                     :data-mode="option.value"
                     :class="{ active: searchMode === option.value }"
                     :aria-pressed="searchMode === option.value"
-                    :disabled="loading"
+                    :disabled="loading || (option.value === SEARCH_MODE_LOCAL_AND_WEB && !canUseHybridSearch)"
                     @click="searchMode = option.value"
                   >
                     <span class="search-mode-option-dot" aria-hidden="true"></span>
@@ -1575,15 +1988,40 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
               </div>
+              <el-button
+                v-if="!qwenApiKeyEditorVisible"
+                type="primary"
+                plain
+                class="search-mode-key-btn"
+                :loading="qwenSaving"
+                @click="showQwenApiKeyEditor"
+              >
+                {{ qwenCopy.editApiKey }}
+              </el-button>
             </div>
-            <span class="composer-status muted" :class="{ 'is-live': streaming }">
-              <span v-if="streaming" class="status-dots" aria-hidden="true">
-                <i></i>
-                <i></i>
-                <i></i>
-              </span>
-              {{ composerStatus }}
-            </span>
+            <template v-if="qwenApiKeyEditorVisible">
+              <el-input
+                v-model="qwenApiKeyInput"
+                type="password"
+                :placeholder="qwenCopy.apiKeyPlaceholder"
+                show-password
+              />
+              <div class="qwen-config-actions">
+                <el-button type="primary" plain :loading="qwenSaving" @click="saveQwenConfig()">
+                  {{ qwenCopy.saveConfig }}
+                </el-button>
+                <el-button :disabled="qwenSaving" @click="hideQwenApiKeyEditor">
+                  {{ qwenCopy.cancelEditApiKey }}
+                </el-button>
+              </div>
+            </template>
+            <p v-if="!canUseHybridSearch" class="muted">{{ qwenCopy.localOnlyLocked }}</p>
+          </div>
+
+          <div class="composer-card-top">
+            <div class="composer-card-top-left">
+              <span class="composer-badge">{{ copy.strictCitation }}</span>
+            </div>
           </div>
 
           <el-input
@@ -1592,7 +2030,7 @@ onBeforeUnmount(() => {
             resize="none"
             :rows="4"
             :placeholder="copy.placeholder"
-            :disabled="loading"
+            :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig"
             @keydown="handleComposerKeydown"
           />
 
@@ -1600,7 +2038,7 @@ onBeforeUnmount(() => {
             <span class="composer-hint muted">{{ copy.composerHint }}</span>
             <div class="composer-actions">
               <el-button v-if="streaming" plain @click="stopStreaming()">{{ copy.stop }}</el-button>
-              <el-button class="send-btn" type="primary" :disabled="loading" @click="submitQuestion()">
+              <el-button class="send-btn" type="primary" :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig" @click="submitQuestion()">
                 <span class="send-btn-content">
                   <span>{{ loading ? copy.asking : copy.ask }}</span>
                   <span class="send-btn-arrow" aria-hidden="true">-></span>
@@ -2180,6 +2618,42 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.answer-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.answer-variants-label {
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.answer-variants-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.answer-variant-chip {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.answer-variant-chip:hover,
+.answer-variant-chip.active {
+  color: var(--text-main);
+  border-color: var(--line-strong);
+  background: rgba(255, 248, 233, 0.12);
+}
+
 .message-action-btn {
   min-height: 30px;
   padding: 0 12px;
@@ -2517,6 +2991,29 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-label {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .search-mode-group {
   display: flex;
   align-items: center;
@@ -2678,6 +3175,37 @@ onBeforeUnmount(() => {
 
 .send-btn:hover .send-btn-arrow {
   transform: translate(2px, -2px);
+}
+
+.qwen-config-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 248, 233, 0.04);
+}
+
+.qwen-config-panel.compact {
+  gap: 10px;
+}
+
+.qwen-model-select {
+  width: 220px;
+}
+
+.qwen-config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.qwen-config-actions.start {
+  justify-content: flex-start;
+}
+
+.search-mode-key-btn {
+  align-self: flex-end;
 }
 
 .context-rail {

@@ -15,6 +15,7 @@ public class RagChatMessage {
     private String answerMode;
     private String citationsJson;
     private String sourcesJson;
+    private String variantsJson;
     private LocalDateTime createdAt;
     private Boolean feedbackHelpful;
     private String feedbackNote;

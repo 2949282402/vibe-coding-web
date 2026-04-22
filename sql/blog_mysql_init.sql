@@ -7,9 +7,13 @@ USE hejulian_blog;
 CREATE TABLE IF NOT EXISTS user_accounts (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     username VARCHAR(64) NOT NULL,
+    email VARCHAR(160) NULL,
     password VARCHAR(255) NOT NULL,
     display_name VARCHAR(100) NOT NULL,
     role VARCHAR(32) NOT NULL,
+    qwen_api_key VARCHAR(512) NULL,
+    qwen_chat_model VARCHAR(80) NULL,
+    qwen_web_search_enabled TINYINT(1) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_user_accounts_username (username)
@@ -67,6 +71,7 @@ CREATE TABLE IF NOT EXISTS post_tags (
 CREATE TABLE IF NOT EXISTS comments (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     post_id BIGINT NOT NULL,
+    user_id BIGINT NULL,
     nickname VARCHAR(80) NOT NULL,
     email VARCHAR(120) NOT NULL,
     content VARCHAR(1000) NOT NULL,
@@ -104,6 +109,8 @@ CREATE TABLE IF NOT EXISTS rag_chat_messages (
     content LONGTEXT NOT NULL,
     answer_mode VARCHAR(16) NULL,
     citations_json LONGTEXT NULL,
+    sources_json LONGTEXT NULL,
+    variants_json LONGTEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_rag_chat_messages_session_id (session_id),
     KEY idx_rag_chat_messages_created_at (created_at)

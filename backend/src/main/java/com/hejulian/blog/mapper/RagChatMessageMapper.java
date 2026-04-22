@@ -44,6 +44,8 @@ public interface RagChatMessageMapper {
 
     int updateFeedback(@Param("messageId") Long messageId, @Param("helpful") Boolean helpful, @Param("note") String note);
 
+    int updateVariants(@Param("messageId") Long messageId, @Param("variantsJson") String variantsJson);
+
     int deleteBySessionIdFromMessageId(@Param("sessionId") String sessionId, @Param("fromMessageId") Long fromMessageId);
 
     int deleteBySessionId(@Param("sessionId") String sessionId);

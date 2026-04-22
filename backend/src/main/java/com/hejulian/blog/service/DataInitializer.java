@@ -18,12 +18,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+@Order(10)
 public class DataInitializer implements CommandLineRunner {
 
     private final UserAccountMapper userAccountMapper;
@@ -47,6 +49,7 @@ public class DataInitializer implements CommandLineRunner {
 
         UserAccount admin = new UserAccount();
         admin.setUsername("admin");
+        admin.setEmail("admin@example.com");
         admin.setDisplayName("Site Administrator");
         admin.setPassword(passwordEncoder.encode("Admin123!"));
         admin.setRole(Role.ADMIN);

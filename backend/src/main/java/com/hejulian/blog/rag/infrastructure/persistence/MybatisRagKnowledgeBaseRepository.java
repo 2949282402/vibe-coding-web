@@ -117,6 +117,7 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
                 entity.getAnswerMode(),
                 readCitations(entity.getCitationsJson()),
                 readSources(entity.getSourcesJson()),
+                readVariants(entity.getVariantsJson()),
                 entity.getCreatedAt(),
                 entity.getFeedbackHelpful(),
                 entity.getFeedbackNote(),
@@ -127,6 +128,16 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     @Override
     public ChatHistoryMessage updateConversationFeedback(String sessionId, Long messageId, Boolean helpful, String note) {
         ragChatMessageMapper.updateFeedback(messageId, helpful, note);
+        return ragChatMessageMapper.selectBySessionId(sessionId).stream()
+                .filter(message -> message.getId().equals(messageId))
+                .findFirst()
+                .map(this::toHistoryMessage)
+                .orElse(null);
+    }
+
+    @Override
+    public ChatHistoryMessage updateConversationVariants(String sessionId, Long messageId, List<com.hejulian.blog.dto.RagDtos.AnswerVariant> variants) {
+        ragChatMessageMapper.updateVariants(messageId, writeVariants(variants));
         return ragChatMessageMapper.selectBySessionId(sessionId).stream()
                 .filter(message -> message.getId().equals(messageId))
                 .findFirst()
@@ -245,6 +256,7 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
                 entity.getAnswerMode(),
                 readCitations(entity.getCitationsJson()),
                 readSources(entity.getSourcesJson()),
+                readVariants(entity.getVariantsJson()),
                 entity.getCreatedAt(),
                 entity.getFeedbackHelpful(),
                 entity.getFeedbackNote(),
@@ -261,6 +273,7 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
         entity.setAnswerMode(message.mode());
         entity.setCitationsJson(writeCitations(message.citations()));
         entity.setSourcesJson(writeSources(message.sources()));
+        entity.setVariantsJson(writeVariants(message.variants()));
         entity.setCreatedAt(message.createdAt());
         entity.setFeedbackHelpful(message.feedbackHelpful());
         entity.setFeedbackNote(message.feedbackNote());
@@ -350,6 +363,29 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
             return OBJECT_MAPPER.writeValueAsString(sources);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to serialize sources", ex);
+        }
+    }
+
+    private List<com.hejulian.blog.dto.RagDtos.AnswerVariant> readVariants(String variantsJson) {
+        if (!StringUtils.hasText(variantsJson)) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readerForListOf(com.hejulian.blog.dto.RagDtos.AnswerVariant.class).readValue(variantsJson);
+        } catch (Exception ex) {
+            log.warn("Failed to parse variants: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private String writeVariants(List<com.hejulian.blog.dto.RagDtos.AnswerVariant> variants) {
+        if (variants == null || variants.isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(variants);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to serialize variants", ex);
         }
     }
 

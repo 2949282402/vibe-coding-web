@@ -3,9 +3,11 @@ package com.hejulian.blog.controller;
 import com.hejulian.blog.common.ApiResponse;
 import com.hejulian.blog.common.PageResponse;
 import com.hejulian.blog.dto.BlogDtos;
+import com.hejulian.blog.security.AuthenticatedUser;
 import com.hejulian.blog.service.PublicBlogService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,8 +48,11 @@ public class PublicBlogController {
     }
 
     @PostMapping("/comments")
-    public ApiResponse<Void> createComment(@Valid @RequestBody BlogDtos.CommentCreateRequest request) {
-        publicBlogService.createComment(request);
+    public ApiResponse<Void> createComment(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @Valid @RequestBody BlogDtos.CommentCreateRequest request
+    ) {
+        publicBlogService.createComment(authenticatedUser, request);
         return ApiResponse.success("Comment submitted and awaiting review", null);
     }
 }

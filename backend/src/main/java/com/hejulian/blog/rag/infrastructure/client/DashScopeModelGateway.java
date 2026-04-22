@@ -1,7 +1,9 @@
 package com.hejulian.blog.rag.infrastructure.client;
 
+import com.hejulian.blog.dto.AuthDtos;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hejulian.blog.rag.application.RagRuntimeContextHolder;
 import com.hejulian.blog.rag.config.RagProperties;
 import com.hejulian.blog.rag.domain.model.RerankResult;
 import com.hejulian.blog.rag.domain.model.WebSearchAnswer;
@@ -38,6 +40,14 @@ import org.springframework.web.client.RestClient;
 public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatModel {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final List<String> QWEN_CHAT_MODELS = List.of(
+            "qwen-max",
+            "qwen-plus",
+            "qwen-turbo",
+            "qwen3-32b",
+            "qwen3-14b",
+            "qwen3-8b"
+    );
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(20))
             .build();
@@ -49,16 +59,28 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
 
     @Override
     public boolean isChatConfigured() {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null) {
+            return StringUtils.hasText(runtime.apiKey()) && StringUtils.hasText(runtime.chatModel());
+        }
         return generatorConfigured();
     }
 
     @Override
     public boolean supportsWebSearch() {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null) {
+            return runtime.webSearchEnabled();
+        }
         return webSearchConfigured();
     }
 
     @Override
     public String chatModelName() {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null && StringUtils.hasText(runtime.chatModel())) {
+            return runtime.chatModel();
+        }
         return ragProperties.getGenerator().getModel();
     }
 
@@ -90,8 +112,8 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         RagProperties.Generator generator = ragProperties.getGenerator();
         return generator.isEnabled()
                 && StringUtils.hasText(generator.getBaseUrl())
-                && StringUtils.hasText(generator.getModel())
-                && StringUtils.hasText(resolveApiKey(generator.getApiKey()));
+                && StringUtils.hasText(resolveGeneratorModel(generator.getModel()))
+                && StringUtils.hasText(resolveGeneratorApiKey(generator.getApiKey()));
     }
 
     private boolean webSearchConfigured() {
@@ -182,7 +204,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
             RagProperties.Generator generator = ragProperties.getGenerator();
             RestClient client = RestClient.builder()
                     .baseUrl(generator.getBaseUrl())
-                    .defaultHeader("Authorization", "Bearer " + resolveApiKey(generator.getApiKey()))
+                    .defaultHeader("Authorization", "Bearer " + resolveGeneratorApiKey(generator.getApiKey()))
                     .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                     .build();
 
@@ -195,7 +217,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
                     .uri("/chat/completions")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of(
-                            "model", generator.getModel(),
+                            "model", resolveGeneratorModel(generator.getModel()),
                             "temperature", temperature,
                             "messages", messages
                     ))
@@ -221,7 +243,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         try {
             RagProperties.Generator generator = ragProperties.getGenerator();
             String requestBody = OBJECT_MAPPER.writeValueAsString(Map.of(
-                    "model", generator.getModel(),
+                    "model", resolveGeneratorModel(generator.getModel()),
                     "temperature", temperature,
                     "stream", true,
                     "messages", List.of(
@@ -233,7 +255,7 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(resolveUrl(generator.getBaseUrl(), "/chat/completions")))
                     .timeout(Duration.ofSeconds(generator.getTimeoutSeconds()))
-                    .header("Authorization", "Bearer " + resolveApiKey(generator.getApiKey()))
+                    .header("Authorization", "Bearer " + resolveGeneratorApiKey(generator.getApiKey()))
                     .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                     .header("Accept", "text/event-stream")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
@@ -290,27 +312,16 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         }
 
         try {
-            RagProperties.WebSearch webSearch = ragProperties.getWebSearch();
             RestClient client = RestClient.builder()
-                    .baseUrl(webSearch.getBaseUrl())
+                    .baseUrl(resolveWebSearchCompatibleBaseUrl())
                     .defaultHeader("Authorization", "Bearer " + resolveWebSearchApiKey())
                     .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                     .build();
 
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", resolveWebSearchModel());
-            body.put("input", Map.of(
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt),
-                            Map.of("role", "user", "content", userPrompt)
-                    )
-            ));
-            body.put("parameters", buildWebSearchParameters(temperature));
-
             JsonNode response = client.post()
-                    .uri("/api/v1/services/aigc/text-generation/generation")
+                    .uri("/chat/completions")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
+                    .body(buildWebSearchChatRequest(systemPrompt, userPrompt, temperature))
                     .retrieve()
                     .body(JsonNode.class);
 
@@ -318,9 +329,8 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
                 return null;
             }
 
-            JsonNode output = response.path("output");
-            String answer = extractDashScopeMessageContent(output.path("choices").path(0).path("message"));
-            List<WebSearchSource> sources = extractWebSearchSources(output.path("search_info").path("search_results"));
+            String answer = extractChatCompletionContent(response);
+            List<WebSearchSource> sources = extractWebSearchSources(extractCompatibleSearchResults(response));
             if (!StringUtils.hasText(answer) && sources.isEmpty()) {
                 return null;
             }
@@ -399,12 +409,76 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         return extractContentNode(contentNode);
     }
 
-    private String extractDashScopeMessageContent(JsonNode messageNode) {
-        if (messageNode == null || messageNode.isMissingNode() || messageNode.isNull()) {
-            return "";
+    private Map<String, Object> buildWebSearchParameters(double temperature) {
+        RagProperties.WebSearch webSearch = ragProperties.getWebSearch();
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("temperature", temperature);
+        parameters.put("enable_search", true);
+
+        Map<String, Object> searchOptions = new HashMap<>();
+        searchOptions.put("enable_source", webSearch.isEnableSource());
+        searchOptions.put("enable_citation", webSearch.isEnableCitation());
+        searchOptions.put("forced_search", webSearch.isForcedSearch());
+        if (StringUtils.hasText(webSearch.getCitationFormat())) {
+            searchOptions.put("citation_format", webSearch.getCitationFormat());
         }
-        JsonNode contentNode = messageNode.path("content");
-        return extractContentNode(contentNode);
+        if (StringUtils.hasText(webSearch.getSearchStrategy())) {
+            searchOptions.put("search_strategy", webSearch.getSearchStrategy());
+        }
+        parameters.put("search_options", searchOptions);
+        return parameters;
+    }
+
+    private Map<String, Object> buildWebSearchChatRequest(String systemPrompt, String userPrompt, double temperature) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("model", resolveWebSearchModel());
+        request.put("messages", List.of(
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)
+        ));
+        request.putAll(buildWebSearchParameters(temperature));
+        return request;
+    }
+
+    private List<WebSearchSource> extractWebSearchSources(JsonNode searchResultsNode) {
+        if (searchResultsNode == null || !searchResultsNode.isArray()) {
+            return List.of();
+        }
+
+        List<WebSearchSource> sources = new ArrayList<>();
+        for (JsonNode item : searchResultsNode) {
+            sources.add(new WebSearchSource(
+                    item.path("index").asInt(sources.size() + 1),
+                    item.path("title").asText(""),
+                    item.path("url").asText(""),
+                    item.path("site_name").asText(""),
+                    item.path("icon").asText("")
+            ));
+        }
+        return List.copyOf(sources);
+    }
+
+    private JsonNode extractCompatibleSearchResults(JsonNode response) {
+        if (response == null || response.isMissingNode() || response.isNull()) {
+            return null;
+        }
+        JsonNode choicesNode = response.path("choices");
+        if (choicesNode.isArray() && !choicesNode.isEmpty()) {
+            JsonNode firstChoice = choicesNode.path(0);
+            JsonNode nestedResults = firstChoice.path("message").path("search_info").path("search_results");
+            if (nestedResults.isArray()) {
+                return nestedResults;
+            }
+            JsonNode choiceLevelResults = firstChoice.path("search_info").path("search_results");
+            if (choiceLevelResults.isArray()) {
+                return choiceLevelResults;
+            }
+        }
+        JsonNode topLevelResults = response.path("search_info").path("search_results");
+        if (topLevelResults.isArray()) {
+            return topLevelResults;
+        }
+        return null;
     }
 
     private String extractContentNode(JsonNode contentNode) {
@@ -427,54 +501,39 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         return "";
     }
 
-    private Map<String, Object> buildWebSearchParameters(double temperature) {
-        RagProperties.WebSearch webSearch = ragProperties.getWebSearch();
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put("result_format", "message");
-        parameters.put("temperature", temperature);
-        parameters.put("enable_search", true);
-
-        Map<String, Object> searchOptions = new HashMap<>();
-        searchOptions.put("enable_source", webSearch.isEnableSource());
-        searchOptions.put("enable_citation", webSearch.isEnableCitation());
-        searchOptions.put("forced_search", webSearch.isForcedSearch());
-        if (StringUtils.hasText(webSearch.getCitationFormat())) {
-            searchOptions.put("citation_format", webSearch.getCitationFormat());
-        }
-        if (StringUtils.hasText(webSearch.getSearchStrategy())) {
-            searchOptions.put("search_strategy", webSearch.getSearchStrategy());
-        }
-        parameters.put("search_options", searchOptions);
-        return parameters;
-    }
-
-    private List<WebSearchSource> extractWebSearchSources(JsonNode searchResultsNode) {
-        if (searchResultsNode == null || !searchResultsNode.isArray()) {
-            return List.of();
-        }
-
-        List<WebSearchSource> sources = new ArrayList<>();
-        for (JsonNode item : searchResultsNode) {
-            sources.add(new WebSearchSource(
-                    item.path("index").asInt(sources.size() + 1),
-                    item.path("title").asText(""),
-                    item.path("url").asText(""),
-                    item.path("site_name").asText(""),
-                    item.path("icon").asText("")
-            ));
-        }
-        return List.copyOf(sources);
-    }
-
     private String resolveApiKey(String primaryApiKey) {
         return StringUtils.hasText(primaryApiKey) ? primaryApiKey.trim() : dashscopeApiKey;
     }
 
+    private String resolveGeneratorApiKey(String primaryApiKey) {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null && StringUtils.hasText(runtime.apiKey())) {
+            return runtime.apiKey().trim();
+        }
+        return resolveApiKey(primaryApiKey);
+    }
+
+    private String resolveGeneratorModel(String configuredModel) {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null && StringUtils.hasText(runtime.chatModel())) {
+            return runtime.chatModel().trim();
+        }
+        return configuredModel;
+    }
+
     private String resolveWebSearchApiKey() {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null && StringUtils.hasText(runtime.apiKey())) {
+            return runtime.apiKey().trim();
+        }
         return resolveApiKey(ragProperties.getWebSearch().getApiKey());
     }
 
     private String resolveWebSearchModel() {
+        RagRuntimeContextHolder.RagRuntimeOptions runtime = RagRuntimeContextHolder.get();
+        if (runtime != null && StringUtils.hasText(runtime.chatModel())) {
+            return runtime.chatModel().trim();
+        }
         String configured = ragProperties.getWebSearch().getModel();
         if (StringUtils.hasText(configured)) {
             return configured.trim();
@@ -482,9 +541,92 @@ public class DashScopeModelGateway implements EmbeddingModel, RerankModel, ChatM
         return ragProperties.getGenerator().getModel();
     }
 
+    private String resolveWebSearchCompatibleBaseUrl() {
+        String configured = ragProperties.getWebSearch().getBaseUrl();
+        if (!StringUtils.hasText(configured)) {
+            return ragProperties.getGenerator().getBaseUrl();
+        }
+        String trimmed = configured.trim();
+        if (trimmed.contains("/compatible-mode/")) {
+            return trimmed;
+        }
+        if (trimmed.endsWith("/")) {
+            return trimmed + "compatible-mode/v1";
+        }
+        return trimmed + "/compatible-mode/v1";
+    }
+
     private String resolveUrl(String baseUrl, String path) {
         String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         String normalizedPath = path.startsWith("/") ? path : "/" + path;
         return normalizedBaseUrl + normalizedPath;
     }
+
+    public List<AuthDtos.QwenModelCapability> inspectQwenModels(String apiKey) {
+        if (!StringUtils.hasText(apiKey)) {
+            return List.of();
+        }
+
+        List<AuthDtos.QwenModelCapability> capabilities = new ArrayList<>();
+        String normalizedKey = apiKey.trim();
+        for (String model : QWEN_CHAT_MODELS) {
+            if (!probeChatModel(normalizedKey, model)) {
+                continue;
+            }
+            capabilities.add(new AuthDtos.QwenModelCapability(model, probeWebSearchModel(normalizedKey, model)));
+        }
+        return List.copyOf(capabilities);
+    }
+
+    private boolean probeChatModel(String apiKey, String model) {
+        try {
+            RestClient client = RestClient.builder()
+                    .baseUrl(ragProperties.getGenerator().getBaseUrl())
+                    .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                    .build();
+
+            JsonNode response = client.post()
+                    .uri("/chat/completions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "model", model,
+                            "temperature", 0,
+                            "max_tokens", 1,
+                            "messages", List.of(Map.of("role", "user", "content", "hello"))
+                    ))
+                    .retrieve()
+                    .body(JsonNode.class);
+            return response != null && !response.path("choices").isMissingNode();
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    private boolean probeWebSearchModel(String apiKey, String model) {
+        try {
+            RestClient client = RestClient.builder()
+                    .baseUrl(resolveWebSearchCompatibleBaseUrl())
+                    .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                    .build();
+
+            JsonNode response = client.post()
+                    .uri("/chat/completions")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "model", model,
+                            "temperature", 0,
+                            "max_tokens", 1,
+                            "messages", List.of(Map.of("role", "user", "content", "today news")),
+                            "enable_search", true
+                    ))
+                    .retrieve()
+                    .body(JsonNode.class);
+            return response != null && !response.path("choices").isMissingNode();
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
 }
