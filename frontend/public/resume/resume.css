@@ -257,13 +257,19 @@ li {
 @media print {
   html, body {
     background: #ffffff;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    line-height: 1.4;
   }
 
   .container {
     max-width: none;
     margin: 0;
     padding: 0;
-    width: 210mm;
+    width: auto;
   }
 
   .export-btn {
@@ -271,7 +277,7 @@ li {
   }
 
   .resume {
-    width: 100%;
+    width: 194mm;
     max-width: none;
     margin: 0 auto;
     border: none;
@@ -284,24 +290,98 @@ li {
   .hero {
     display: block;
     position: relative;
-    padding-right: 176px;
-    min-height: 188px;
+    padding: 14px 18px 12px;
+    padding-right: 162px;
+    min-height: 156px;
   }
 
   .avatar {
     position: absolute;
     top: 0;
     right: 0;
+    width: 122px;
+    height: 156px;
+    border-radius: 10px;
     justify-self: auto;
     align-self: auto;
   }
 
-  .section,
-  .item,
-  .hero,
-  .skill-group {
-    break-inside: avoid;
-    page-break-inside: avoid;
+  .body {
+    padding: 4px 18px 14px;
+  }
+
+  .name {
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+
+  .meta {
+    font-size: 10.5px;
+    margin: 2px 0;
+  }
+
+  .meta span {
+    margin-right: 8px;
+  }
+
+  .tags {
+    gap: 5px;
+    margin-top: 8px;
+  }
+
+  .tag {
+    padding: 3px 8px;
+    font-size: 10.5px;
+  }
+
+  .section {
+    padding: 10px 0;
+  }
+
+  .section-title {
+    margin-bottom: 8px;
+    font-size: 16px;
+    gap: 8px;
+  }
+
+  .section-title::before {
+    width: 4px;
+    height: 16px;
+  }
+
+  .item {
+    margin-bottom: 10px;
+  }
+
+  .item-head {
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+
+  .item-title {
+    font-size: 12px;
+  }
+
+  .item-subtitle,
+  .date,
+  li {
+    font-size: 10.5px;
+  }
+
+  .item-subtitle {
+    margin-bottom: 4px;
+  }
+
+  .date {
+    font-weight: 600;
+  }
+
+  ul {
+    margin: 4px 0 0 15px;
+  }
+
+  li {
+    margin-bottom: 2px;
   }
 
   .skills-grid {
