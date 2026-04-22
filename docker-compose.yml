@@ -39,7 +39,7 @@ services:
       retries: 12
 
   qdrant:
-    image: dockerproxy.com/qdrant/qdrant:v1.17.0
+    image: qdrant/qdrant:v1.17.0
     container_name: hejulian-blog-qdrant
     restart: unless-stopped
     ports:
