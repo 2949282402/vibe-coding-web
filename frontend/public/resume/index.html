@@ -9,6 +9,7 @@
 </head>
 <body>
   <div class="container">
+    <button class="export-btn" type="button" onclick="exportResume()">导出PDF</button>
     <main class="resume">
       <section class="hero">
         <div>
@@ -155,9 +156,9 @@
           </div>
         </section>
 
-        <section class="section">
+        <section class="section skills-section">
           <h2 class="section-title">技能</h2>
-          <div class="grid-2">
+          <div class="skills-grid">
             <div class="skill-group">
               <h4>编程语言</h4>
               <p>熟悉Java，了解Python、C++。</p>
@@ -217,5 +218,10 @@
       </div>
     </main>
   </div>
+  <script>
+    window.exportResume = function exportResume() {
+      window.print();
+    };
+  </script>
 </body>
 </html>
