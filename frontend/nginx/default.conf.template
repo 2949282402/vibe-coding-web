@@ -8,6 +8,14 @@ server {
     access_log ${NGINX_LOG_FILE};
     error_log ${NGINX_LOG_FILE} warn;
 
+    location = /resume {
+        return 302 /resume/;
+    }
+
+    location ^~ /resume/ {
+        try_files $uri $uri/ /resume/index.html;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }

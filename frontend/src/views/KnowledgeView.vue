@@ -2222,6 +2222,12 @@ onBeforeUnmount(() => {
   grid-template-columns: 300px minmax(0, 1fr) 300px;
   gap: 14px;
   align-items: stretch;
+  --rag-radius-panel: 24px;
+  --rag-radius-card: 18px;
+  --rag-radius-control: 14px;
+  --rag-radius-bubble: 20px;
+  --rag-radius-avatar: 12px;
+  --rag-radius-pill: 999px;
 }
 
 .knowledge-shell.sidebar-collapsed {
@@ -2258,13 +2264,13 @@ onBeforeUnmount(() => {
   max-height: 100%;
   padding: 14px;
   overflow: hidden;
-  border-radius: 28px;
+  border-radius: var(--rag-radius-panel);
   background:
     radial-gradient(circle at top left, rgba(224, 208, 180, 0.1), transparent 32%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
     rgba(9, 9, 9, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
 }
 
 .sidebar-toolbar {
@@ -2291,7 +2297,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   width: 42px;
   height: 42px;
-  border-radius: 14px;
+  border-radius: var(--rag-radius-control);
   cursor: pointer;
 }
 
@@ -2400,7 +2406,7 @@ onBeforeUnmount(() => {
 
 .session-item {
   padding: 12px;
-  border-radius: 18px;
+  border-radius: var(--rag-radius-card);
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.028);
   cursor: pointer;
@@ -2417,7 +2423,7 @@ onBeforeUnmount(() => {
   background:
     linear-gradient(180deg, rgba(216, 196, 164, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: none;
 }
 
 .session-item.deleted {
@@ -2459,7 +2465,7 @@ onBeforeUnmount(() => {
 .ghost-action {
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   cursor: pointer;
   font-size: 0.72rem;
 }
@@ -2472,7 +2478,7 @@ onBeforeUnmount(() => {
   color: #ffd6d6;
   border-color: rgba(255, 110, 110, 0.28);
   background: linear-gradient(180deg, rgba(120, 28, 28, 0.28), rgba(72, 16, 16, 0.18));
-  box-shadow: inset 0 1px 0 rgba(255, 214, 214, 0.08);
+  box-shadow: none;
 }
 
 .ghost-action.danger-strong:hover {
@@ -2488,7 +2494,7 @@ onBeforeUnmount(() => {
 
 .capability-pill,
 .prompt-chip {
-  border-radius: 14px;
+  border-radius: var(--rag-radius-control);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
@@ -2533,13 +2539,13 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
-  border-radius: 30px;
+  border-radius: var(--rag-radius-panel);
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
     radial-gradient(circle at top center, rgba(222, 205, 173, 0.08), transparent 26%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015)),
     rgba(12, 12, 12, 0.92);
-  box-shadow: 0 26px 72px rgba(0, 0, 0, 0.26);
+  box-shadow: none;
 }
 
 .chat-stage:fullscreen {
@@ -2653,7 +2659,7 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 34px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   cursor: pointer;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
@@ -2666,7 +2672,7 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
@@ -2718,7 +2724,7 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--rag-radius-avatar);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
   font-size: 0.68rem;
@@ -2768,7 +2774,7 @@ onBeforeUnmount(() => {
 .answer-variant-chip {
   min-height: 30px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
@@ -2786,7 +2792,7 @@ onBeforeUnmount(() => {
 .message-action-btn {
   min-height: 30px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid var(--line);
   background: rgba(255, 248, 233, 0.04);
   color: var(--text-secondary);
@@ -2846,7 +2852,7 @@ onBeforeUnmount(() => {
   max-width: min(100%, 360px);
   min-height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
@@ -2878,7 +2884,7 @@ onBeforeUnmount(() => {
 .inline-source-type {
   flex: none;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   background: rgba(255, 255, 255, 0.06);
   font-size: 0.68rem;
   letter-spacing: 0.08em;
@@ -2926,7 +2932,7 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 24px;
   padding: 0 9px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
@@ -2936,7 +2942,7 @@ onBeforeUnmount(() => {
 .feedback-pill {
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
@@ -2977,7 +2983,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   padding: 0 0.25em;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   color: var(--brand-accent, #d8d8d8);
   text-decoration: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
@@ -2992,7 +2998,7 @@ onBeforeUnmount(() => {
 .chat-bubble {
   width: 100%;
   padding: 18px 20px;
-  border-radius: 22px;
+  border-radius: var(--rag-radius-bubble);
   line-height: 1.85;
 }
 
@@ -3013,7 +3019,7 @@ onBeforeUnmount(() => {
   margin-left: auto;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: none;
 }
 
 .pending-bubble {
@@ -3027,7 +3033,7 @@ onBeforeUnmount(() => {
 .placeholder-line {
   display: block;
   height: 12px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
   background-size: 220% 100%;
   animation: shimmer 1.3s linear infinite;
@@ -3087,8 +3093,8 @@ onBeforeUnmount(() => {
   bottom: 0;
   z-index: 3;
   padding: 14px 18px 18px;
-  background: linear-gradient(180deg, rgba(11, 11, 11, 0), rgba(11, 11, 11, 0.72) 28%, rgba(11, 11, 11, 0.92));
-  backdrop-filter: blur(18px);
+  background: transparent;
+  backdrop-filter: none;
 }
 
 .composer-card {
@@ -3139,7 +3145,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 4px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.02);
   box-shadow: none;
@@ -3151,7 +3157,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   min-height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
@@ -3165,7 +3171,7 @@ onBeforeUnmount(() => {
 .search-mode-option-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   background: currentColor;
   opacity: 0.4;
 }
@@ -3210,13 +3216,15 @@ onBeforeUnmount(() => {
 }
 
 .composer-input-shell {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .composer-input-shell :deep(.el-textarea__inner) {
-  min-height: 108px !important;
-  padding: 14px 16px 88px;
-  border-radius: 18px;
+  min-height: 100px !important;
+  padding: 14px 16px;
+  border-radius: var(--rag-radius-card);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   box-shadow: none;
@@ -3229,15 +3237,13 @@ onBeforeUnmount(() => {
 }
 
 .composer-inline-hints {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  left: 10px;
+  position: static;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+  padding: 0;
 }
 
 .composer-hint-chip {
@@ -3245,7 +3251,7 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 26px;
   padding: 0 9px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.025);
   font-size: 0.72rem;
@@ -3284,7 +3290,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin-bottom: 14px;
   padding: 16px;
-  border-radius: 18px;
+  border-radius: var(--rag-radius-card);
   border: 1px solid var(--line);
   background: rgba(255, 248, 233, 0.04);
 }
@@ -3304,7 +3310,7 @@ onBeforeUnmount(() => {
 
 .qwen-model-select :deep(.el-select__wrapper) {
   min-height: 32px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   background: rgba(255, 255, 255, 0.03);
   box-shadow: none;
 }
@@ -3339,7 +3345,7 @@ onBeforeUnmount(() => {
   border-color: rgba(220, 193, 136, 0.5);
   background: linear-gradient(180deg, rgba(221, 194, 138, 0.96), rgba(181, 143, 76, 0.96));
   color: #1d1711;
-  box-shadow: inset 0 1px 0 rgba(255, 250, 240, 0.24);
+  box-shadow: none;
 }
 
 .send-btn.composer-inline-btn:hover,
@@ -3395,13 +3401,24 @@ onBeforeUnmount(() => {
 }
 
 .context-panel {
+  position: relative;
   padding: 16px;
-  border-radius: 24px;
+  border-radius: var(--rag-radius-panel);
   overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(218, 201, 170, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018)),
-    rgba(10, 10, 10, 0.9);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018) 58%, rgba(255, 255, 255, 0));
+}
+
+.context-panel::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 72px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--bg-page, #0b0b0b));
 }
 
 .rail-hint,
@@ -3422,7 +3439,7 @@ onBeforeUnmount(() => {
 
 .source-group {
   padding: 12px;
-  border-radius: 18px;
+  border-radius: var(--rag-radius-card);
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.025);
 }
@@ -3468,9 +3485,9 @@ onBeforeUnmount(() => {
 .source-group-marker {
   width: 10px;
   height: 10px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   flex-shrink: 0;
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04);
+  box-shadow: none;
 }
 
 .source-group.is-blog .source-group-marker {
@@ -3492,7 +3509,7 @@ onBeforeUnmount(() => {
 .source-group-count {
   font-size: 0.78rem;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -3516,7 +3533,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 6px;
   padding: 12px 13px;
-  border-radius: 16px;
+  border-radius: var(--rag-radius-card);
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.028);
   transition: 0.2s ease;
@@ -3532,7 +3549,7 @@ onBeforeUnmount(() => {
 .source-card:target {
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 
 .source-title {
@@ -3582,7 +3599,7 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 24px;
   padding: 0 8px;
-  border-radius: 999px;
+  border-radius: var(--rag-radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   font-size: 0.72rem;
@@ -3632,7 +3649,7 @@ html[data-theme='light'] .chat-stage {
 }
 
 html[data-theme='light'] .composer-shell {
-  background: linear-gradient(180deg, rgba(239, 239, 236, 0), rgba(239, 239, 236, 0.8) 28%, rgba(239, 239, 236, 0.96));
+  background: transparent;
 }
 
 html[data-theme='light'] .composer-card,
@@ -3647,12 +3664,15 @@ html[data-theme='light'] .pending-bubble,
 html[data-theme='light'] .stage-badge,
 html[data-theme='light'] .composer-badge,
 html[data-theme='light'] .citation-pill,
-html[data-theme='light'] .search-mode-picker {
-  background: rgba(0, 0, 0, 0.035);
+html[data-theme='light'] .search-mode-picker,
+html[data-theme='light'] .composer-hint-chip,
+html[data-theme='light'] .qwen-config-panel,
+html[data-theme='light'] .qwen-model-select :deep(.el-select__wrapper) {
+  background: transparent;
 }
 
 html[data-theme='light'] .search-mode-option:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(196, 171, 130, 0.08);
 }
 
 html[data-theme='light'] .search-mode-option[data-mode='LOCAL_ONLY'].active {
@@ -3665,28 +3685,39 @@ html[data-theme='light'] .search-mode-option[data-mode='LOCAL_AND_WEB'].active {
 
 html[data-theme='light'] .source-group.is-blog {
   background:
-    linear-gradient(180deg, rgba(255, 190, 88, 0.18), rgba(0, 0, 0, 0.02) 42%),
-    rgba(0, 0, 0, 0.03);
+    linear-gradient(180deg, rgba(255, 190, 88, 0.12), rgba(255, 190, 88, 0.02) 42%),
+    transparent;
 }
 
 html[data-theme='light'] .source-group.is-web {
   background:
-    linear-gradient(180deg, rgba(95, 177, 255, 0.18), rgba(0, 0, 0, 0.02) 42%),
-    rgba(0, 0, 0, 0.03);
+    linear-gradient(180deg, rgba(95, 177, 255, 0.12), rgba(95, 177, 255, 0.02) 42%),
+    transparent;
 }
 
 html[data-theme='light'] .context-panel {
   background:
     radial-gradient(circle at top left, rgba(196, 171, 130, 0.12), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 241, 236, 0.96)),
-    rgba(248, 248, 245, 0.96);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(244, 241, 236, 0.56) 56%, rgba(244, 241, 236, 0));
+}
+
+html[data-theme='light'] .context-panel::after {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), #f7f5ef);
+}
+
+html[data-theme='light'] .composer-input-shell :deep(.el-textarea__inner) {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+html[data-theme='light'] .composer-input-shell :deep(.el-textarea__inner:focus) {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 html[data-theme='light'] .ghost-action.danger-strong {
   color: #842828;
   border-color: rgba(176, 52, 52, 0.24);
   background: linear-gradient(180deg, rgba(255, 218, 218, 0.96), rgba(248, 231, 231, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: none;
 }
 
 html[data-theme='light'] .ghost-action.danger-strong:hover {
@@ -3793,7 +3824,7 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
     z-index: 30;
     transform: translateX(calc(-100% - 20px));
     transition: transform 0.24s ease;
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.44);
+    box-shadow: none;
   }
 
   .knowledge-shell.sidebar-open .knowledge-sidebar {
@@ -3865,11 +3896,17 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
     margin-top: 10px;
     justify-content: flex-start;
     flex-wrap: wrap;
+    padding-top: 0;
+    background: none;
   }
 
   .composer-input-shell :deep(.el-textarea__inner) {
     min-height: 96px !important;
     padding-bottom: 14px;
+  }
+
+  .composer-input-shell {
+    padding-bottom: 0;
   }
 
   .user-bubble {
@@ -3893,7 +3930,7 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
 
   .chat-bubble {
     padding: 14px 16px;
-    border-radius: 18px;
+    border-radius: var(--rag-radius-card);
   }
 
   .assistant-bubble {
@@ -3903,7 +3940,7 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
 
   .composer-card {
     padding: 10px;
-    border-radius: 20px;
+    border-radius: var(--rag-radius-bubble);
   }
 
   .session-item,
@@ -3946,7 +3983,7 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
   .avatar-ring {
     width: 36px;
     height: 36px;
-    border-radius: 10px;
+    border-radius: var(--rag-radius-avatar);
   }
 
   .bubble-meta strong {
