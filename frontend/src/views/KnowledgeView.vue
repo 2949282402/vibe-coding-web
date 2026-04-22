@@ -73,6 +73,11 @@ const isChatStageFullscreen = ref(false);
 
 let activeController = null;
 
+function getSessionStorageKey() {
+  const scope = String(authStore.user?.id || authStore.user?.username || 'guest').trim();
+  return `${STORAGE_SESSION_KEY}:${scope || 'guest'}`;
+}
+
 function normalizeSessionId(value) {
   const normalized = String(value || '').trim();
   return normalized || '';
@@ -95,11 +100,11 @@ function persistSearchMode() {
 function readSessionId() {
   const fromQuery = normalizeSessionId(route.query.sessionId);
   if (fromQuery) {
-    localStorage.setItem(STORAGE_SESSION_KEY, fromQuery);
+    localStorage.setItem(getSessionStorageKey(), fromQuery);
     return fromQuery;
   }
 
-  const existing = localStorage.getItem(STORAGE_SESSION_KEY);
+  const existing = localStorage.getItem(getSessionStorageKey());
   if (existing) {
     return existing;
   }
@@ -107,11 +112,13 @@ function readSessionId() {
 }
 
 function createSessionId() {
+  const userScope = String(authStore.user?.id || authStore.user?.username || 'guest').trim();
   const generated =
     globalThis.crypto?.randomUUID?.() ||
     `rag-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-  localStorage.setItem(STORAGE_SESSION_KEY, generated);
-  return generated;
+  const sessionId = userScope ? `rag-${userScope}-${generated}` : generated;
+  localStorage.setItem(getSessionStorageKey(), sessionId);
+  return sessionId;
 }
 
 function getCacheUserScope() {
@@ -939,7 +946,7 @@ function handleComposerKeydown(event) {
 }
 
 function persistActiveSession() {
-  localStorage.setItem(STORAGE_SESSION_KEY, activeSessionId.value);
+  localStorage.setItem(getSessionStorageKey(), activeSessionId.value);
 }
 
 function syncRouteSession(sessionId) {
@@ -1454,16 +1461,21 @@ async function switchSession(sessionToLoad) {
   closeSidebar();
 }
 
-function startNewChat() {
+async function startNewChat() {
   stopStreaming();
   question.value = '';
   result.value = null;
   history.value = [];
   clearPendingTurn();
   cancelEditMessage();
+  activeSourceMessageId.value = null;
+  blogSourcesExpanded.value = false;
+  webSourcesExpanded.value = false;
   activeSessionId.value = createSessionId();
   persistActiveSession();
+  persistHistoryCache(activeSessionId.value, []);
   syncRouteSession(activeSessionId.value);
+  await loadHistory(activeSessionId.value);
   closeSidebar();
 }
 
@@ -2005,12 +2017,6 @@ onBeforeUnmount(() => {
             <p class="muted">{{ qwenCopy.noModels }}</p>
           </div>
 
-          <div v-else class="qwen-config-panel compact">
-            <div class="compact-config-note" v-if="!canUseHybridSearch">
-              <p class="muted">{{ qwenCopy.localOnlyLocked }}</p>
-            </div>
-          </div>
-
           <div class="composer-input-shell">
             <el-input
               v-model="question"
@@ -2023,7 +2029,6 @@ onBeforeUnmount(() => {
             />
             <div class="composer-inline-hints">
               <div class="search-mode-group">
-                <span class="toolbar-label">{{ copy.searchModeTitle }}</span>
                 <div class="search-mode-picker" :aria-label="copy.searchModeTitle" role="group">
                   <button
                     v-for="option in searchModeOptions"
@@ -2041,67 +2046,30 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
               </div>
-              <div
-                class="qwen-tools"
-                @mouseenter="openQwenTools"
-                @mouseleave="scheduleHideQwenTools"
-                @focusin="openQwenTools"
-                @focusout="scheduleHideQwenTools"
-              >
-                <button
-                  type="button"
-                  class="mini-action qwen-tools-toggle"
-                  :aria-label="uiCopy.configToolsOpen"
-                  :aria-expanded="qwenToolsVisible"
-                  @click="toggleQwenTools"
+              <div class="qwen-inline-controls">
+                <el-select
+                  :model-value="qwenConfig.selectedModel"
+                  class="qwen-model-select"
+                  :aria-label="qwenCopy.model"
+                  @change="saveQwenConfig"
                 >
-                  <span class="chevron-icon" :class="{ active: qwenToolsVisible }" aria-hidden="true"></span>
-                </button>
-                <transition name="fade-slide">
-                  <div v-if="qwenToolsVisible" class="qwen-tools-popover section-card">
-                    <div class="toolbar-group qwen-tools-group">
-                      <span class="toolbar-label">{{ qwenCopy.model }}</span>
-                      <el-select
-                        :model-value="qwenConfig.selectedModel"
-                        class="qwen-model-select"
-                        @change="saveQwenConfig"
-                      >
-                        <el-option
-                          v-for="model in qwenConfig.models"
-                          :key="model.model"
-                          :label="model.model"
-                          :value="model.model"
-                        />
-                      </el-select>
-                    </div>
-                    <el-button
-                      v-if="!qwenApiKeyEditorVisible"
-                      type="primary"
-                      plain
-                      class="search-mode-key-btn"
-                      :loading="qwenSaving"
-                      @click="showQwenApiKeyEditor"
-                    >
-                      {{ qwenCopy.editApiKey }}
-                    </el-button>
-                    <template v-if="qwenApiKeyEditorVisible">
-                      <el-input
-                        v-model="qwenApiKeyInput"
-                        type="password"
-                        :placeholder="qwenCopy.apiKeyPlaceholder"
-                        show-password
-                      />
-                      <div class="qwen-config-actions">
-                        <el-button type="primary" plain :loading="qwenSaving" @click="saveQwenConfig()">
-                          {{ qwenCopy.saveConfig }}
-                        </el-button>
-                        <el-button :disabled="qwenSaving" @click="hideQwenApiKeyEditor">
-                          {{ qwenCopy.cancelEditApiKey }}
-                        </el-button>
-                      </div>
-                    </template>
-                  </div>
-                </transition>
+                  <el-option
+                    v-for="model in qwenConfig.models"
+                    :key="model.model"
+                    :label="model.model"
+                    :value="model.model"
+                  />
+                </el-select>
+                <el-button
+                  v-if="!qwenApiKeyEditorVisible"
+                  type="primary"
+                  plain
+                  class="search-mode-key-btn"
+                  :loading="qwenSaving"
+                  @click="showQwenApiKeyEditor"
+                >
+                  {{ qwenCopy.editApiKey }}
+                </el-button>
               </div>
               <span class="composer-hint-chip muted">{{ uiCopy.composerSubmitHint }}</span>
               <span class="composer-hint-chip muted">{{ uiCopy.composerNewlineHint }}</span>
@@ -2116,6 +2084,22 @@ onBeforeUnmount(() => {
                   <span>{{ loading ? copy.asking : copy.ask }}</span>
                   <span class="send-btn-arrow" aria-hidden="true">-></span>
                 </span>
+              </el-button>
+            </div>
+          </div>
+          <div v-if="qwenApiKeyEditorVisible" class="qwen-inline-editor">
+            <el-input
+              v-model="qwenApiKeyInput"
+              type="password"
+              :placeholder="qwenCopy.apiKeyPlaceholder"
+              show-password
+            />
+            <div class="qwen-config-actions">
+              <el-button type="primary" plain :loading="qwenSaving" @click="saveQwenConfig()">
+                {{ qwenCopy.saveConfig }}
+              </el-button>
+              <el-button :disabled="qwenSaving" @click="hideQwenApiKeyEditor">
+                {{ qwenCopy.cancelEditApiKey }}
               </el-button>
             </div>
           </div>
@@ -3109,15 +3093,13 @@ onBeforeUnmount(() => {
 
 .composer-card {
   position: relative;
-  width: min(860px, 100%);
+  width: 90%;
+  max-width: none;
   margin: 0 auto;
-  padding: 10px 10px 12px;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
-    rgba(17, 17, 17, 0.92);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .toolbar-group {
@@ -3144,49 +3126,6 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
-.qwen-tools {
-  position: relative;
-}
-
-.qwen-tools-toggle {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-}
-
-.qwen-tools-popover {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 6;
-  width: min(340px, calc(100vw - 56px));
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(20, 20, 20, 0.96), rgba(12, 12, 12, 0.94)),
-    rgba(12, 12, 12, 0.96);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
-}
-
-.qwen-tools-group {
-  display: grid;
-  gap: 8px;
-}
-
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
 .search-mode-label {
   color: var(--text-secondary);
   font-size: 0.72rem;
@@ -3199,19 +3138,19 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px;
+  padding: 4px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: none;
 }
 
 .search-mode-option {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 0 14px;
+  min-height: 32px;
+  padding: 0 12px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
@@ -3240,7 +3179,7 @@ onBeforeUnmount(() => {
 .search-mode-option.active {
   color: var(--text-main);
   border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
 }
 
 .search-mode-option.active .search-mode-option-dot {
@@ -3263,16 +3202,11 @@ onBeforeUnmount(() => {
 }
 
 .composer-card::after {
-  content: '';
-  position: absolute;
-  inset: auto 18px -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
-  opacity: 0.28;
+  content: none;
 }
 
 .composer-card.is-busy {
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.34);
+  box-shadow: none;
 }
 
 .composer-input-shell {
@@ -3281,8 +3215,17 @@ onBeforeUnmount(() => {
 
 .composer-input-shell :deep(.el-textarea__inner) {
   min-height: 108px !important;
-  padding: 14px 16px 54px;
+  padding: 14px 16px 88px;
   border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: none;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.composer-input-shell :deep(.el-textarea__inner:focus) {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .composer-inline-hints {
@@ -3300,17 +3243,18 @@ onBeforeUnmount(() => {
 .composer-hint-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 26px;
+  padding: 0 9px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.74rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 0.72rem;
   white-space: nowrap;
 }
 
 .composer-inline-btn,
 .search-mode-group,
+.qwen-inline-controls,
 .search-mode-picker,
 .search-mode-option {
   pointer-events: auto;
@@ -3318,14 +3262,6 @@ onBeforeUnmount(() => {
 
 .composer-inline-hints > .search-mode-group {
   margin-right: 0;
-}
-
-.compact-config-note {
-  margin-bottom: 8px;
-}
-
-.compact-config-note p {
-  margin: 0;
 }
 
 .send-btn-content {
@@ -3353,17 +3289,37 @@ onBeforeUnmount(() => {
   background: rgba(255, 248, 233, 0.04);
 }
 
-.qwen-config-panel.compact {
-  gap: 10px;
+.qwen-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .qwen-model-select {
   width: 220px;
+  max-width: 100%;
+}
+
+.qwen-model-select :deep(.el-select__wrapper) {
+  min-height: 32px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: none;
+}
+
+.qwen-inline-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .qwen-config-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .qwen-config-actions.start {
@@ -3371,7 +3327,26 @@ onBeforeUnmount(() => {
 }
 
 .search-mode-key-btn {
-  align-self: flex-end;
+  flex-shrink: 0;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: none;
+}
+
+.send-btn.composer-inline-btn {
+  min-height: 32px;
+  padding: 0 14px;
+  border-color: rgba(220, 193, 136, 0.5);
+  background: linear-gradient(180deg, rgba(221, 194, 138, 0.96), rgba(181, 143, 76, 0.96));
+  color: #1d1711;
+  box-shadow: inset 0 1px 0 rgba(255, 250, 240, 0.24);
+}
+
+.send-btn.composer-inline-btn:hover,
+.send-btn.composer-inline-btn:focus-visible {
+  border-color: rgba(220, 193, 136, 0.66);
+  background: linear-gradient(180deg, rgba(236, 214, 170, 0.98), rgba(194, 154, 87, 0.98));
+  color: #17120d;
 }
 
 .context-rail {
@@ -3756,8 +3731,7 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
     grid-template-columns: 92px minmax(0, 1fr) 320px;
   }
 
-  .conversation-timeline,
-  .composer-card {
+  .conversation-timeline {
     width: min(920px, 100%);
   }
 
@@ -3836,6 +3810,10 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
 }
 
 @media (max-width: 720px) {
+  .composer-card {
+    width: 100%;
+  }
+
   .knowledge-shell {
     gap: 10px;
     min-height: 0;

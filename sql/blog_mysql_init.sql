@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS rag_chunks (
 CREATE TABLE IF NOT EXISTS rag_chat_messages (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     session_id VARCHAR(64) NOT NULL,
+    user_id BIGINT NULL,
     role VARCHAR(16) NOT NULL,
     content LONGTEXT NOT NULL,
     answer_mode VARCHAR(16) NULL,
@@ -112,6 +113,20 @@ CREATE TABLE IF NOT EXISTS rag_chat_messages (
     sources_json LONGTEXT NULL,
     variants_json LONGTEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_rag_chat_messages_user_session (user_id, session_id),
     KEY idx_rag_chat_messages_session_id (session_id),
     KEY idx_rag_chat_messages_created_at (created_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS rag_chat_sessions (
+    session_id VARCHAR(64) PRIMARY KEY,
+    user_id BIGINT NULL,
+    title VARCHAR(160) NOT NULL,
+    preview LONGTEXT NULL,
+    message_count INT NOT NULL DEFAULT 0,
+    manual_title TINYINT(1) NOT NULL DEFAULT 0,
+    deleted TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_rag_chat_sessions_user_updated (user_id, updated_at)
 ) ENGINE=InnoDB;

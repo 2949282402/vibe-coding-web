@@ -26,30 +26,31 @@ public interface KnowledgeBaseRepository {
 
     void deleteChunksByPostId(Long postId);
 
-    List<ChatHistoryMessage> loadConversationHistory(String sessionId);
+    List<ChatHistoryMessage> loadConversationHistory(Long userId, String sessionId);
 
-    ChatHistoryMessage saveConversationMessage(ChatHistoryMessage message);
+    ChatHistoryMessage saveConversationMessage(Long userId, ChatHistoryMessage message);
 
-    ChatHistoryMessage updateConversationFeedback(String sessionId, Long messageId, Boolean helpful, String note);
+    ChatHistoryMessage updateConversationFeedback(Long userId, String sessionId, Long messageId, Boolean helpful, String note);
 
-    ChatHistoryMessage updateConversationVariants(String sessionId, Long messageId, List<com.hejulian.blog.dto.RagDtos.AnswerVariant> variants);
+    ChatHistoryMessage updateConversationVariants(Long userId, String sessionId, Long messageId, List<com.hejulian.blog.dto.RagDtos.AnswerVariant> variants);
 
-    void deleteConversationMessagesFrom(String sessionId, Long fromMessageId);
+    void deleteConversationMessagesFrom(Long userId, String sessionId, Long fromMessageId);
 
-    ConversationSession findConversationSession(String sessionId);
+    ConversationSession findConversationSession(Long userId, String sessionId);
 
-    List<ConversationSession> listConversationSessions(boolean includeDeleted, int limit);
+    List<ConversationSession> listConversationSessions(Long userId, boolean includeDeleted, int limit);
 
     ConversationSession saveOrUpdateConversationSession(
+            Long userId,
             String sessionId,
             String generatedTitle,
             String preview,
             int messageCount
     );
 
-    ConversationSession renameConversationSession(String sessionId, String title);
+    ConversationSession renameConversationSession(Long userId, String sessionId, String title);
 
-    void markConversationSessionDeleted(String sessionId, boolean deleted);
+    void markConversationSessionDeleted(Long userId, String sessionId, boolean deleted);
 
-    void deleteConversationSessionPermanently(String sessionId);
+    void deleteConversationSessionPermanently(Long userId, String sessionId);
 }

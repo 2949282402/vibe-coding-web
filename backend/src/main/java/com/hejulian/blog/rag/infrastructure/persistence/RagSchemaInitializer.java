@@ -30,8 +30,10 @@ public class RagSchemaInitializer implements CommandLineRunner {
             ensureColumn(metadata, "rag_chat_messages", "feedback_helpful", "BOOLEAN");
             ensureColumn(metadata, "rag_chat_messages", "feedback_note", "VARCHAR(1000)");
             ensureColumn(metadata, "rag_chat_messages", "feedback_at", isH2(productName) ? "TIMESTAMP" : "DATETIME");
+            ensureColumn(metadata, "rag_chat_messages", "user_id", "BIGINT");
             ensureColumn(metadata, "rag_chat_messages", "sources_json", isH2(productName) ? "CLOB" : "LONGTEXT");
             ensureColumn(metadata, "rag_chat_messages", "variants_json", isH2(productName) ? "CLOB" : "LONGTEXT");
+            ensureColumn(metadata, "rag_chat_sessions", "user_id", "BIGINT");
             backfillMissingSessions();
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to initialize rag_chunks schema", ex);
@@ -73,6 +75,7 @@ public class RagSchemaInitializer implements CommandLineRunner {
                 CREATE TABLE IF NOT EXISTS rag_chat_messages (
                     id BIGINT PRIMARY KEY AUTO_INCREMENT,
                     session_id VARCHAR(64) NOT NULL,
+                    user_id BIGINT NULL,
                     role VARCHAR(16) NOT NULL,
                     content %s NOT NULL,
                     answer_mode VARCHAR(16) NULL,
@@ -97,6 +100,7 @@ public class RagSchemaInitializer implements CommandLineRunner {
         return """
                 CREATE TABLE IF NOT EXISTS rag_chat_sessions (
                     session_id VARCHAR(64) PRIMARY KEY,
+                    user_id BIGINT NULL,
                     title VARCHAR(160) NOT NULL,
                     preview %s NULL,
                     message_count INT NOT NULL DEFAULT 0,
@@ -115,10 +119,11 @@ public class RagSchemaInitializer implements CommandLineRunner {
     private void backfillMissingSessions() {
         jdbcTemplate.execute("""
                 INSERT INTO rag_chat_sessions (
-                    session_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
+                    session_id, user_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
                 )
                 SELECT
                     m.session_id,
+                    MAX(m.user_id),
                     SUBSTRING(COALESCE(MAX(CASE WHEN m.role = 'user' THEN m.content END), m.session_id), 1, 160),
                     SUBSTRING(MAX(CASE WHEN m.role = 'user' THEN m.content END), 1, 400),
                     COUNT(*),
@@ -127,9 +132,11 @@ public class RagSchemaInitializer implements CommandLineRunner {
                     MIN(m.created_at),
                     MAX(m.created_at)
                 FROM rag_chat_messages m
-                LEFT JOIN rag_chat_sessions s ON s.session_id = m.session_id
+                LEFT JOIN rag_chat_sessions s
+                    ON s.session_id = m.session_id
+                   AND COALESCE(s.user_id, -1) = COALESCE(m.user_id, -1)
                 WHERE s.session_id IS NULL
-                GROUP BY m.session_id
+                GROUP BY m.session_id, m.user_id
                 """);
     }
 

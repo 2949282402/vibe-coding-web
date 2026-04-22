@@ -35,43 +35,58 @@ public class RagController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Valid @RequestBody RagDtos.AskRequest request
     ) {
-        return withRuntime(authenticatedUser, () -> ApiResponse.success(ragApplicationService.askQuestion(request)));
+        Long userId = requireUserId(authenticatedUser);
+        return withRuntime(authenticatedUser, () -> ApiResponse.success(ragApplicationService.askQuestion(userId, request)));
     }
 
     @GetMapping("/history")
-    public ApiResponse<RagDtos.HistoryResponse> history(@RequestParam("sessionId") String sessionId) {
-        return ApiResponse.success(ragApplicationService.getHistory(sessionId));
+    public ApiResponse<RagDtos.HistoryResponse> history(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @RequestParam("sessionId") String sessionId
+    ) {
+        return ApiResponse.success(ragApplicationService.getHistory(requireUserId(authenticatedUser), sessionId));
     }
 
     @GetMapping("/sessions")
     public ApiResponse<RagDtos.SessionListResponse> sessions(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @RequestParam(name = "includeDeleted", defaultValue = "false") boolean includeDeleted
     ) {
-        return ApiResponse.success(ragApplicationService.getSessions(includeDeleted));
+        return ApiResponse.success(ragApplicationService.getSessions(requireUserId(authenticatedUser), includeDeleted));
     }
 
     @PatchMapping("/sessions/{sessionId}")
     public ApiResponse<RagDtos.SessionSummary> renameSession(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @PathVariable String sessionId,
             @Valid @RequestBody RagDtos.SessionUpdateRequest request
     ) {
-        return ApiResponse.success(ragApplicationService.renameSession(sessionId, request.title()));
+        return ApiResponse.success(ragApplicationService.renameSession(requireUserId(authenticatedUser), sessionId, request.title()));
     }
 
     @DeleteMapping("/sessions/{sessionId}")
-    public ApiResponse<Void> deleteSession(@PathVariable String sessionId) {
-        ragApplicationService.deleteSession(sessionId);
+    public ApiResponse<Void> deleteSession(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String sessionId
+    ) {
+        ragApplicationService.deleteSession(requireUserId(authenticatedUser), sessionId);
         return ApiResponse.success(null);
     }
 
     @PostMapping("/sessions/{sessionId}/restore")
-    public ApiResponse<RagDtos.SessionSummary> restoreSession(@PathVariable String sessionId) {
-        return ApiResponse.success(ragApplicationService.restoreSession(sessionId));
+    public ApiResponse<RagDtos.SessionSummary> restoreSession(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String sessionId
+    ) {
+        return ApiResponse.success(ragApplicationService.restoreSession(requireUserId(authenticatedUser), sessionId));
     }
 
     @DeleteMapping("/sessions/{sessionId}/purge")
-    public ApiResponse<Void> purgeSession(@PathVariable String sessionId) {
-        ragApplicationService.purgeSession(sessionId);
+    public ApiResponse<Void> purgeSession(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String sessionId
+    ) {
+        ragApplicationService.purgeSession(requireUserId(authenticatedUser), sessionId);
         return ApiResponse.success(null);
     }
 
@@ -80,8 +95,7 @@ public class RagController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Valid @RequestBody RagDtos.FeedbackRequest request
     ) {
-        authService.getCurrentProfile(authenticatedUser);
-        return ApiResponse.success(ragApplicationService.submitFeedback(request));
+        return ApiResponse.success(ragApplicationService.submitFeedback(requireUserId(authenticatedUser), request));
     }
 
     @PostMapping("/replay")
@@ -89,7 +103,8 @@ public class RagController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Valid @RequestBody RagDtos.ReplayRequest request
     ) {
-        return withRuntime(authenticatedUser, () -> ApiResponse.success(ragApplicationService.replayConversation(request)));
+        Long userId = requireUserId(authenticatedUser);
+        return withRuntime(authenticatedUser, () -> ApiResponse.success(ragApplicationService.replayConversation(userId, request)));
     }
 
     @GetMapping("/search")
@@ -102,8 +117,9 @@ public class RagController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Valid @RequestBody RagDtos.AskRequest request
     ) {
+        Long userId = requireUserId(authenticatedUser);
         RagRuntimeContextHolder.RagRuntimeOptions runtime = authService.requireRagRuntimeOptions(authenticatedUser);
-        return ragApplicationService.streamQuestion(request, runtime);
+        return ragApplicationService.streamQuestion(userId, request, runtime);
     }
 
     private <T> T withRuntime(AuthenticatedUser authenticatedUser, java.util.function.Supplier<T> supplier) {
@@ -113,5 +129,10 @@ public class RagController {
         } finally {
             RagRuntimeContextHolder.clear();
         }
+    }
+
+    private Long requireUserId(AuthenticatedUser authenticatedUser) {
+        authService.getCurrentProfile(authenticatedUser);
+        return authenticatedUser.getId();
     }
 }

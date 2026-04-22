@@ -38,15 +38,15 @@ public interface RagChatMessageMapper {
             @Param("feedbackTo") LocalDateTime feedbackTo
     );
 
-    List<RagChatMessage> selectBySessionId(@Param("sessionId") String sessionId);
+    List<RagChatMessage> selectBySessionId(@Param("userId") Long userId, @Param("sessionId") String sessionId);
 
     int insert(RagChatMessage message);
 
-    int updateFeedback(@Param("messageId") Long messageId, @Param("helpful") Boolean helpful, @Param("note") String note);
+    int updateFeedback(@Param("userId") Long userId, @Param("sessionId") String sessionId, @Param("messageId") Long messageId, @Param("helpful") Boolean helpful, @Param("note") String note);
 
-    int updateVariants(@Param("messageId") Long messageId, @Param("variantsJson") String variantsJson);
+    int updateVariants(@Param("userId") Long userId, @Param("sessionId") String sessionId, @Param("messageId") Long messageId, @Param("variantsJson") String variantsJson);
 
-    int deleteBySessionIdFromMessageId(@Param("sessionId") String sessionId, @Param("fromMessageId") Long fromMessageId);
+    int deleteBySessionIdFromMessageId(@Param("userId") Long userId, @Param("sessionId") String sessionId, @Param("fromMessageId") Long fromMessageId);
 
-    int deleteBySessionId(@Param("sessionId") String sessionId);
+    int deleteBySessionId(@Param("userId") Long userId, @Param("sessionId") String sessionId);
 }

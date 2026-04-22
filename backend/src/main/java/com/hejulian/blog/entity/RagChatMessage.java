@@ -10,6 +10,7 @@ public class RagChatMessage {
 
     private Long id;
     private String sessionId;
+    private Long userId;
     private String role;
     private String content;
     private String answerMode;

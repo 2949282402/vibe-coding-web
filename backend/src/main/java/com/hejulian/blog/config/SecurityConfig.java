@@ -1,6 +1,7 @@
 package com.hejulian.blog.config;
 
 import com.hejulian.blog.security.JwtAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,8 +34,10 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/public/site", "/api/public/posts", "/api/public/posts/**", "/api/public/rag/search").permitAll()
                         .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/auth/**", "/api/public/comments", "/api/public/rag/**").authenticated()
                         .requestMatchers("/uploads/**", "/actuator/health", "/actuator/info").permitAll()
                         .anyRequest().authenticated()

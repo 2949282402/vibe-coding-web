@@ -51,7 +51,6 @@ public class RagApplicationService {
     private static final String SEARCH_MODE_LOCAL_AND_WEB = "LOCAL_AND_WEB";
     private static final String SOURCE_TYPE_BLOG = "blog";
     private static final String SOURCE_TYPE_WEB = "web";
-
     private final RagProperties ragProperties;
     private final RagIndexingApplicationService indexingService;
     private final KnowledgeBaseRepository knowledgeBaseRepository;
@@ -65,10 +64,11 @@ public class RagApplicationService {
     private final CitationGuardService citationGuardService;
     private final CacheManager cacheManager;
 
-    public RagDtos.AskResponse askQuestion(RagDtos.AskRequest request) {
-        AnswerContext context = buildAnswerContext(request);
+    public RagDtos.AskResponse askQuestion(Long userId, RagDtos.AskRequest request) {
+        AnswerContext context = buildAnswerContext(userId, request);
         if (context.prebuiltResponse() != null) {
             List<RagDtos.ChatMessage> history = persistConversation(
+                    userId,
                     context.sessionId(),
                     context.question(),
                     context.prebuiltResponse().answer(),
@@ -92,6 +92,7 @@ public class RagApplicationService {
             if (resolution != null) {
                 List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
                 List<RagDtos.ChatMessage> history = persistConversation(
+                        userId,
                         context.sessionId(),
                         context.question(),
                         resolution.answer(),
@@ -120,7 +121,7 @@ public class RagApplicationService {
                     promptService.buildUserPrompt(context.question(), context.evidences(), recentPromptHistory(context.history())),
                     0.2
             );
-            if (citationGuardService.isStrictlyCited(generated, context.sources().size())) {
+            if (shouldAcceptGeneratedAnswer(context, generated)) {
                 answer = generated.trim();
                 mode = "llm";
             }
@@ -128,6 +129,7 @@ public class RagApplicationService {
 
         List<Integer> citations = citationGuardService.extractCitationIndices(answer, context.sources().size());
         List<RagDtos.ChatMessage> history = persistConversation(
+                userId,
                 context.sessionId(),
                 context.question(),
                 answer,
@@ -138,19 +140,20 @@ public class RagApplicationService {
         return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true);
     }
 
-    public SseEmitter streamQuestion(RagDtos.AskRequest request) {
-        return streamQuestion(request, null);
+    public SseEmitter streamQuestion(Long userId, RagDtos.AskRequest request) {
+        return streamQuestion(userId, request, null);
     }
 
     public SseEmitter streamQuestion(
+            Long userId,
             RagDtos.AskRequest request,
             @Nullable RagRuntimeContextHolder.RagRuntimeOptions runtimeOptions
     ) {
         SseEmitter emitter = new SseEmitter(ragProperties.getStreamTimeoutMillis());
-        CompletableFuture.runAsync(() -> {
+                CompletableFuture.runAsync(() -> {
                     RagRuntimeContextHolder.set(runtimeOptions);
                     try {
-                        streamQuestionInternal(request, emitter);
+                        streamQuestionInternal(userId, request, emitter);
                     } finally {
                         RagRuntimeContextHolder.clear();
                     }
@@ -187,64 +190,64 @@ public class RagApplicationService {
         return indexingService.rebuildIndex();
     }
 
-    @Cacheable(cacheNames = CacheNames.RAG_HISTORY, key = "#sessionId == null ? '' : #sessionId.trim()")
-    public RagDtos.HistoryResponse getHistory(String sessionId) {
+    @Cacheable(cacheNames = CacheNames.RAG_HISTORY, key = "#userId + ':' + (#sessionId == null ? '' : #sessionId.trim())")
+    public RagDtos.HistoryResponse getHistory(Long userId, String sessionId) {
         String normalizedSessionId = normalizeSessionId(sessionId);
         return new RagDtos.HistoryResponse(
                 normalizedSessionId,
-                toDtoHistory(limitHistory(knowledgeBaseRepository.loadConversationHistory(normalizedSessionId), MAX_RESPONSE_HISTORY_MESSAGES))
+                toDtoHistory(limitHistory(knowledgeBaseRepository.loadConversationHistory(userId, normalizedSessionId), MAX_RESPONSE_HISTORY_MESSAGES))
         );
     }
 
-    @Cacheable(cacheNames = CacheNames.RAG_SESSION_LIST, key = "#includeDeleted")
-    public RagDtos.SessionListResponse getSessions(boolean includeDeleted) {
-        List<RagDtos.SessionSummary> sessions = knowledgeBaseRepository.listConversationSessions(includeDeleted, 80).stream()
+    @Cacheable(cacheNames = CacheNames.RAG_SESSION_LIST, key = "#userId + ':' + #includeDeleted")
+    public RagDtos.SessionListResponse getSessions(Long userId, boolean includeDeleted) {
+        List<RagDtos.SessionSummary> sessions = knowledgeBaseRepository.listConversationSessions(userId, includeDeleted, 80).stream()
                 .map(this::toSessionSummary)
                 .toList();
         return new RagDtos.SessionListResponse(sessions);
     }
 
-    public RagDtos.SessionSummary renameSession(String sessionId, String title) {
+    public RagDtos.SessionSummary renameSession(Long userId, String sessionId, String title) {
         String normalizedSessionId = normalizeSessionId(sessionId);
-        ConversationSession renamed = knowledgeBaseRepository.renameConversationSession(normalizedSessionId, normalizeSessionTitle(title));
+        ConversationSession renamed = knowledgeBaseRepository.renameConversationSession(userId, normalizedSessionId, normalizeSessionTitle(title));
         if (renamed == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation session not found");
         }
-        evictSessionListCache();
+        evictSessionListCache(userId);
         return toSessionSummary(renamed);
     }
 
-    public void deleteSession(String sessionId) {
+    public void deleteSession(Long userId, String sessionId) {
         String normalizedSessionId = normalizeSessionId(sessionId);
-        ensureSessionExists(normalizedSessionId);
-        knowledgeBaseRepository.markConversationSessionDeleted(normalizedSessionId, true);
-        evictSessionListCache();
+        ensureSessionExists(userId, normalizedSessionId);
+        knowledgeBaseRepository.markConversationSessionDeleted(userId, normalizedSessionId, true);
+        evictSessionListCache(userId);
     }
 
-    public RagDtos.SessionSummary restoreSession(String sessionId) {
+    public RagDtos.SessionSummary restoreSession(Long userId, String sessionId) {
         String normalizedSessionId = normalizeSessionId(sessionId);
-        ensureSessionExists(normalizedSessionId);
-        knowledgeBaseRepository.markConversationSessionDeleted(normalizedSessionId, false);
-        evictSessionListCache();
-        return toSessionSummary(knowledgeBaseRepository.findConversationSession(normalizedSessionId));
+        ensureSessionExists(userId, normalizedSessionId);
+        knowledgeBaseRepository.markConversationSessionDeleted(userId, normalizedSessionId, false);
+        evictSessionListCache(userId);
+        return toSessionSummary(knowledgeBaseRepository.findConversationSession(userId, normalizedSessionId));
     }
 
-    public void purgeSession(String sessionId) {
+    public void purgeSession(Long userId, String sessionId) {
         String normalizedSessionId = normalizeSessionId(sessionId);
-        ConversationSession session = knowledgeBaseRepository.findConversationSession(normalizedSessionId);
+        ConversationSession session = knowledgeBaseRepository.findConversationSession(userId, normalizedSessionId);
         if (session == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation session not found");
         }
         if (!session.deleted()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only deleted sessions can be permanently removed");
         }
-        knowledgeBaseRepository.deleteConversationSessionPermanently(normalizedSessionId);
-        evictConversationCaches(normalizedSessionId);
+        knowledgeBaseRepository.deleteConversationSessionPermanently(userId, normalizedSessionId);
+        evictConversationCaches(userId, normalizedSessionId);
     }
 
-    public RagDtos.ChatMessage submitFeedback(RagDtos.FeedbackRequest request) {
+    public RagDtos.ChatMessage submitFeedback(Long userId, RagDtos.FeedbackRequest request) {
         String sessionId = normalizeSessionId(request.sessionId());
-        List<ChatHistoryMessage> history = knowledgeBaseRepository.loadConversationHistory(sessionId);
+        List<ChatHistoryMessage> history = knowledgeBaseRepository.loadConversationHistory(userId, sessionId);
         ChatHistoryMessage target = history.stream()
                 .filter(message -> Objects.equals(message.id(), request.messageId()))
                 .findFirst()
@@ -255,6 +258,7 @@ public class RagApplicationService {
         }
 
         ChatHistoryMessage updated = knowledgeBaseRepository.updateConversationFeedback(
+                userId,
                 sessionId,
                 target.id(),
                 request.helpful(),
@@ -263,15 +267,15 @@ public class RagApplicationService {
         if (updated == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation message not found");
         }
-        evictHistoryCache(sessionId);
+        evictHistoryCache(userId, sessionId);
         return toDtoMessage(updated);
     }
 
-    public RagDtos.AskResponse replayConversation(RagDtos.ReplayRequest request) {
+    public RagDtos.AskResponse replayConversation(Long userId, RagDtos.ReplayRequest request) {
         String sessionId = normalizeSessionId(request.sessionId());
-        ensureSessionExists(sessionId);
+        ensureSessionExists(userId, sessionId);
 
-        List<ChatHistoryMessage> fullHistory = knowledgeBaseRepository.loadConversationHistory(sessionId);
+        List<ChatHistoryMessage> fullHistory = knowledgeBaseRepository.loadConversationHistory(userId, sessionId);
         int targetIndex = findMessageIndex(fullHistory, request.messageId());
         ChatHistoryMessage target = fullHistory.get(targetIndex);
         ReplayTarget replayTarget = resolveReplayTarget(fullHistory, targetIndex, target, request.question());
@@ -286,6 +290,7 @@ public class RagApplicationService {
 
         if (context.prebuiltResponse() != null) {
             List<RagDtos.ChatMessage> history = persistReplayVariant(
+                    userId,
                     context.sessionId(),
                     replayAssistant,
                     context.question(),
@@ -311,6 +316,7 @@ public class RagApplicationService {
             if (resolution != null) {
                 List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
                 List<RagDtos.ChatMessage> history = persistReplayVariant(
+                        userId,
                         context.sessionId(),
                         replayAssistant,
                         context.question(),
@@ -341,7 +347,7 @@ public class RagApplicationService {
                     promptService.buildUserPrompt(context.question(), context.evidences(), recentPromptHistory(context.history())),
                     0.2
             );
-            if (citationGuardService.isStrictlyCited(generated, context.sources().size())) {
+            if (shouldAcceptGeneratedAnswer(context, generated)) {
                 answer = generated.trim();
                 mode = "llm";
             }
@@ -349,6 +355,7 @@ public class RagApplicationService {
 
         List<Integer> citations = citationGuardService.extractCitationIndices(answer, context.sources().size());
         List<RagDtos.ChatMessage> history = persistReplayVariant(
+                userId,
                 context.sessionId(),
                 replayAssistant,
                 context.question(),
@@ -361,10 +368,11 @@ public class RagApplicationService {
         return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true);
     }
 
-    private void streamQuestionInternal(RagDtos.AskRequest request, SseEmitter emitter) {
-        AnswerContext context = buildAnswerContext(request);
+    private void streamQuestionInternal(Long userId, RagDtos.AskRequest request, SseEmitter emitter) {
+        AnswerContext context = buildAnswerContext(userId, request);
         if (context.prebuiltResponse() != null) {
             List<RagDtos.ChatMessage> history = persistConversation(
+                    userId,
                     context.sessionId(),
                     context.question(),
                     context.prebuiltResponse().answer(),
@@ -404,6 +412,7 @@ public class RagApplicationService {
             if (resolution != null) {
                 List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
                 List<RagDtos.ChatMessage> history = persistConversation(
+                        userId,
                         context.sessionId(),
                         context.question(),
                         resolution.answer(),
@@ -457,7 +466,7 @@ public class RagApplicationService {
                     0.2,
                     delta -> sendEvent(emitter, "delta", delta, null, null)
             );
-            if (citationGuardService.isStrictlyCited(generated, context.sources().size())) {
+            if (shouldAcceptGeneratedAnswer(context, generated)) {
                 answer = generated.trim();
                 mode = "llm";
             }
@@ -465,6 +474,7 @@ public class RagApplicationService {
 
         List<Integer> citations = citationGuardService.extractCitationIndices(answer, context.sources().size());
         List<RagDtos.ChatMessage> history = persistConversation(
+                userId,
                 context.sessionId(),
                 context.question(),
                 answer,
@@ -482,10 +492,10 @@ public class RagApplicationService {
         emitter.complete();
     }
 
-    private AnswerContext buildAnswerContext(RagDtos.AskRequest request) {
+    private AnswerContext buildAnswerContext(Long userId, RagDtos.AskRequest request) {
         String sessionId = normalizeSessionId(request.sessionId());
         List<ChatHistoryMessage> baseHistory = limitHistory(
-                knowledgeBaseRepository.loadConversationHistory(sessionId),
+                knowledgeBaseRepository.loadConversationHistory(userId, sessionId),
                 MAX_RESPONSE_HISTORY_MESSAGES
         );
         return buildAnswerContext(sessionId, request.question(), request.searchMode(), request.topK(), baseHistory);
@@ -717,6 +727,7 @@ public class RagApplicationService {
     }
 
     private List<RagDtos.ChatMessage> persistConversation(
+            Long userId,
             String sessionId,
             String question,
             String answer,
@@ -724,7 +735,7 @@ public class RagApplicationService {
             List<Integer> citations,
             List<RagDtos.Source> sources
     ) {
-        knowledgeBaseRepository.saveConversationMessage(new ChatHistoryMessage(
+        knowledgeBaseRepository.saveConversationMessage(userId, new ChatHistoryMessage(
                 null,
                 sessionId,
                 "user",
@@ -738,7 +749,7 @@ public class RagApplicationService {
                 null,
                 null
         ));
-        knowledgeBaseRepository.saveConversationMessage(new ChatHistoryMessage(
+        knowledgeBaseRepository.saveConversationMessage(userId, new ChatHistoryMessage(
                 null,
                 sessionId,
                 "assistant",
@@ -752,18 +763,20 @@ public class RagApplicationService {
                 null,
                 null
         ));
-        List<ChatHistoryMessage> savedHistory = knowledgeBaseRepository.loadConversationHistory(sessionId);
+        List<ChatHistoryMessage> savedHistory = knowledgeBaseRepository.loadConversationHistory(userId, sessionId);
         knowledgeBaseRepository.saveOrUpdateConversationSession(
+                userId,
                 sessionId,
                 buildSessionTitle(question),
                 buildSessionPreview(question),
                 savedHistory.size()
         );
-        evictConversationCaches(sessionId);
+        evictConversationCaches(userId, sessionId);
         return toDtoHistory(limitHistory(savedHistory, MAX_RESPONSE_HISTORY_MESSAGES));
     }
 
     private List<RagDtos.ChatMessage> persistReplayVariant(
+            Long userId,
             String sessionId,
             ChatHistoryMessage replayAssistant,
             String question,
@@ -775,7 +788,7 @@ public class RagApplicationService {
     ) {
         Long deleteFromMessageId = resolveDeleteStartMessageId(fullHistory, replayAssistant.id());
         if (deleteFromMessageId != null) {
-            knowledgeBaseRepository.deleteConversationMessagesFrom(sessionId, deleteFromMessageId);
+            knowledgeBaseRepository.deleteConversationMessagesFrom(userId, sessionId, deleteFromMessageId);
         }
 
         List<RagDtos.AnswerVariant> variants = new ArrayList<>(replayAssistant.variants() == null ? List.of() : replayAssistant.variants());
@@ -787,19 +800,20 @@ public class RagApplicationService {
                 sources,
                 LocalDateTime.now()
         ));
-        ChatHistoryMessage updated = knowledgeBaseRepository.updateConversationVariants(sessionId, replayAssistant.id(), variants);
+        ChatHistoryMessage updated = knowledgeBaseRepository.updateConversationVariants(userId, sessionId, replayAssistant.id(), variants);
         if (updated == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation message not found");
         }
 
-        List<ChatHistoryMessage> savedHistory = knowledgeBaseRepository.loadConversationHistory(sessionId);
+        List<ChatHistoryMessage> savedHistory = knowledgeBaseRepository.loadConversationHistory(userId, sessionId);
         knowledgeBaseRepository.saveOrUpdateConversationSession(
+                userId,
                 sessionId,
                 buildSessionTitle(question),
                 buildSessionPreview(question),
                 savedHistory.size()
         );
-        evictConversationCaches(sessionId);
+        evictConversationCaches(userId, sessionId);
         return toDtoHistory(limitHistory(savedHistory, MAX_RESPONSE_HISTORY_MESSAGES));
     }
 
@@ -818,23 +832,23 @@ public class RagApplicationService {
         return null;
     }
 
-    private void evictConversationCaches(String sessionId) {
-        evictHistoryCache(sessionId);
-        evictSessionListCache();
+    private void evictConversationCaches(Long userId, String sessionId) {
+        evictHistoryCache(userId, sessionId);
+        evictSessionListCache(userId);
     }
 
-    private void evictHistoryCache(String sessionId) {
+    private void evictHistoryCache(Long userId, String sessionId) {
         Cache cache = cacheManager.getCache(CacheNames.RAG_HISTORY);
         if (cache != null && StringUtils.hasText(sessionId)) {
-            cache.evict(sessionId.trim());
+            cache.evict(userId + ":" + sessionId.trim());
         }
     }
 
-    private void evictSessionListCache() {
+    private void evictSessionListCache(Long userId) {
         Cache cache = cacheManager.getCache(CacheNames.RAG_SESSION_LIST);
         if (cache != null) {
-            cache.evict(Boolean.TRUE);
-            cache.evict(Boolean.FALSE);
+            cache.evict(userId + ":" + Boolean.TRUE);
+            cache.evict(userId + ":" + Boolean.FALSE);
         }
     }
 
@@ -945,8 +959,8 @@ public class RagApplicationService {
         );
     }
 
-    private void ensureSessionExists(String sessionId) {
-        if (knowledgeBaseRepository.findConversationSession(sessionId) == null) {
+    private void ensureSessionExists(Long userId, String sessionId) {
+        if (knowledgeBaseRepository.findConversationSession(userId, sessionId) == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation session not found");
         }
     }
@@ -981,6 +995,18 @@ public class RagApplicationService {
             return SEARCH_MODE_LOCAL_AND_WEB;
         }
         return SEARCH_MODE_LOCAL_ONLY;
+    }
+
+    private boolean shouldAcceptGeneratedAnswer(AnswerContext context, @Nullable String generated) {
+        if (!StringUtils.hasText(generated)) {
+            return false;
+        }
+        String normalized = generated.trim();
+        if (citationGuardService.isStrictlyCited(normalized, context.sources().size())) {
+            return true;
+        }
+        return normalized.equals(promptService.localizedNoMatchAnswer(context.question()))
+                || normalized.equals(promptService.localizedNoDataAnswer(context.question()));
     }
 
     private boolean isWebSearchRequested(String searchMode) {

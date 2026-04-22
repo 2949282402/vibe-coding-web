@@ -9,6 +9,7 @@ import lombok.Setter;
 public class RagChatSession {
 
     private String sessionId;
+    private Long userId;
     private String title;
     private String preview;
     private Integer messageCount;

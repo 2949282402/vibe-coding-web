@@ -7,6 +7,7 @@
     <resultMap id="RagChatMessageResultMap" type="com.hejulian.blog.entity.RagChatMessage">
         <id property="id" column="id"/>
         <result property="sessionId" column="session_id"/>
+        <result property="userId" column="user_id"/>
         <result property="role" column="role"/>
         <result property="content" column="content"/>
         <result property="answerMode" column="answer_mode"/>
@@ -20,9 +21,10 @@
     </resultMap>
 
     <select id="selectBySessionId" resultMap="RagChatMessageResultMap">
-        SELECT id, session_id, role, content, answer_mode, citations_json, sources_json, variants_json, created_at, feedback_helpful, feedback_note, feedback_at
+        SELECT id, session_id, user_id, role, content, answer_mode, citations_json, sources_json, variants_json, created_at, feedback_helpful, feedback_note, feedback_at
         FROM rag_chat_messages
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
         ORDER BY id ASC
     </select>
 
@@ -105,9 +107,9 @@
 
     <insert id="insert" parameterType="com.hejulian.blog.entity.RagChatMessage" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO rag_chat_messages (
-            session_id, role, content, answer_mode, citations_json, sources_json, variants_json, created_at, feedback_helpful, feedback_note, feedback_at
+            session_id, user_id, role, content, answer_mode, citations_json, sources_json, variants_json, created_at, feedback_helpful, feedback_note, feedback_at
         ) VALUES (
-            #{sessionId}, #{role}, #{content}, #{answerMode}, #{citationsJson}, #{sourcesJson}, #{variantsJson}, CURRENT_TIMESTAMP, #{feedbackHelpful}, #{feedbackNote}, #{feedbackAt}
+            #{sessionId}, #{userId}, #{role}, #{content}, #{answerMode}, #{citationsJson}, #{sourcesJson}, #{variantsJson}, CURRENT_TIMESTAMP, #{feedbackHelpful}, #{feedbackNote}, #{feedbackAt}
         )
     </insert>
 
@@ -116,23 +118,29 @@
         SET feedback_helpful = #{helpful},
             feedback_note = #{note},
             feedback_at = CURRENT_TIMESTAMP
-        WHERE id = #{messageId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND id = #{messageId}
     </update>
 
     <update id="updateVariants">
         UPDATE rag_chat_messages
         SET variants_json = #{variantsJson}
-        WHERE id = #{messageId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND id = #{messageId}
     </update>
 
     <delete id="deleteBySessionId">
         DELETE FROM rag_chat_messages
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
     </delete>
 
     <delete id="deleteBySessionIdFromMessageId">
         DELETE FROM rag_chat_messages
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
           AND id >= #{fromMessageId}
     </delete>
 

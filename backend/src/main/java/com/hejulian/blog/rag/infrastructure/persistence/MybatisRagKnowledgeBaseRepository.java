@@ -99,15 +99,15 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     }
 
     @Override
-    public List<ChatHistoryMessage> loadConversationHistory(String sessionId) {
-        return ragChatMessageMapper.selectBySessionId(sessionId).stream()
+    public List<ChatHistoryMessage> loadConversationHistory(Long userId, String sessionId) {
+        return ragChatMessageMapper.selectBySessionId(userId, sessionId).stream()
                 .map(this::toHistoryMessage)
                 .toList();
     }
 
     @Override
-    public ChatHistoryMessage saveConversationMessage(ChatHistoryMessage message) {
-        RagChatMessage entity = toEntity(message);
+    public ChatHistoryMessage saveConversationMessage(Long userId, ChatHistoryMessage message) {
+        RagChatMessage entity = toEntity(userId, message);
         ragChatMessageMapper.insert(entity);
         return new ChatHistoryMessage(
                 entity.getId(),
@@ -126,9 +126,9 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     }
 
     @Override
-    public ChatHistoryMessage updateConversationFeedback(String sessionId, Long messageId, Boolean helpful, String note) {
-        ragChatMessageMapper.updateFeedback(messageId, helpful, note);
-        return ragChatMessageMapper.selectBySessionId(sessionId).stream()
+    public ChatHistoryMessage updateConversationFeedback(Long userId, String sessionId, Long messageId, Boolean helpful, String note) {
+        ragChatMessageMapper.updateFeedback(userId, sessionId, messageId, helpful, note);
+        return ragChatMessageMapper.selectBySessionId(userId, sessionId).stream()
                 .filter(message -> message.getId().equals(messageId))
                 .findFirst()
                 .map(this::toHistoryMessage)
@@ -136,9 +136,9 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     }
 
     @Override
-    public ChatHistoryMessage updateConversationVariants(String sessionId, Long messageId, List<com.hejulian.blog.dto.RagDtos.AnswerVariant> variants) {
-        ragChatMessageMapper.updateVariants(messageId, writeVariants(variants));
-        return ragChatMessageMapper.selectBySessionId(sessionId).stream()
+    public ChatHistoryMessage updateConversationVariants(Long userId, String sessionId, Long messageId, List<com.hejulian.blog.dto.RagDtos.AnswerVariant> variants) {
+        ragChatMessageMapper.updateVariants(userId, sessionId, messageId, writeVariants(variants));
+        return ragChatMessageMapper.selectBySessionId(userId, sessionId).stream()
                 .filter(message -> message.getId().equals(messageId))
                 .findFirst()
                 .map(this::toHistoryMessage)
@@ -146,30 +146,31 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     }
 
     @Override
-    public void deleteConversationMessagesFrom(String sessionId, Long fromMessageId) {
-        ragChatMessageMapper.deleteBySessionIdFromMessageId(sessionId, fromMessageId);
+    public void deleteConversationMessagesFrom(Long userId, String sessionId, Long fromMessageId) {
+        ragChatMessageMapper.deleteBySessionIdFromMessageId(userId, sessionId, fromMessageId);
     }
 
     @Override
-    public ConversationSession findConversationSession(String sessionId) {
-        return toConversationSession(ragChatSessionMapper.selectBySessionId(sessionId));
+    public ConversationSession findConversationSession(Long userId, String sessionId) {
+        return toConversationSession(ragChatSessionMapper.selectBySessionId(userId, sessionId));
     }
 
     @Override
-    public List<ConversationSession> listConversationSessions(boolean includeDeleted, int limit) {
-        return ragChatSessionMapper.selectSessions(includeDeleted, limit).stream()
+    public List<ConversationSession> listConversationSessions(Long userId, boolean includeDeleted, int limit) {
+        return ragChatSessionMapper.selectSessions(userId, includeDeleted, limit).stream()
                 .map(this::toConversationSession)
                 .toList();
     }
 
     @Override
-    public ConversationSession saveOrUpdateConversationSession(String sessionId, String generatedTitle, String preview, int messageCount) {
-        RagChatSession existing = ragChatSessionMapper.selectBySessionId(sessionId);
+    public ConversationSession saveOrUpdateConversationSession(Long userId, String sessionId, String generatedTitle, String preview, int messageCount) {
+        RagChatSession existing = ragChatSessionMapper.selectBySessionId(userId, sessionId);
         LocalDateTime now = LocalDateTime.now();
 
         if (existing == null) {
             RagChatSession session = new RagChatSession();
             session.setSessionId(sessionId);
+            session.setUserId(userId);
             session.setTitle(generatedTitle);
             session.setPreview(preview);
             session.setMessageCount(messageCount);
@@ -182,7 +183,7 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
         }
 
         String title = Boolean.TRUE.equals(existing.getManualTitle()) ? existing.getTitle() : generatedTitle;
-        ragChatSessionMapper.updateLifecycle(sessionId, title, preview, messageCount, now, false);
+        ragChatSessionMapper.updateLifecycle(userId, sessionId, title, preview, messageCount, now, false);
         existing.setTitle(title);
         existing.setPreview(preview);
         existing.setMessageCount(messageCount);
@@ -192,20 +193,20 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
     }
 
     @Override
-    public ConversationSession renameConversationSession(String sessionId, String title) {
-        ragChatSessionMapper.updateTitle(sessionId, title);
-        return findConversationSession(sessionId);
+    public ConversationSession renameConversationSession(Long userId, String sessionId, String title) {
+        ragChatSessionMapper.updateTitle(userId, sessionId, title);
+        return findConversationSession(userId, sessionId);
     }
 
     @Override
-    public void markConversationSessionDeleted(String sessionId, boolean deleted) {
-        ragChatSessionMapper.markDeleted(sessionId, deleted);
+    public void markConversationSessionDeleted(Long userId, String sessionId, boolean deleted) {
+        ragChatSessionMapper.markDeleted(userId, sessionId, deleted);
     }
 
     @Override
-    public void deleteConversationSessionPermanently(String sessionId) {
-        ragChatMessageMapper.deleteBySessionId(sessionId);
-        ragChatSessionMapper.deleteBySessionId(sessionId);
+    public void deleteConversationSessionPermanently(Long userId, String sessionId) {
+        ragChatMessageMapper.deleteBySessionId(userId, sessionId);
+        ragChatSessionMapper.deleteBySessionId(userId, sessionId);
     }
 
     private PublishedPost toPublishedPost(Post post) {
@@ -264,10 +265,11 @@ public class MybatisRagKnowledgeBaseRepository implements KnowledgeBaseRepositor
         );
     }
 
-    private RagChatMessage toEntity(ChatHistoryMessage message) {
+    private RagChatMessage toEntity(Long userId, ChatHistoryMessage message) {
         RagChatMessage entity = new RagChatMessage();
         entity.setId(message.id());
         entity.setSessionId(message.sessionId());
+        entity.setUserId(userId);
         entity.setRole(message.role());
         entity.setContent(message.content());
         entity.setAnswerMode(message.mode());

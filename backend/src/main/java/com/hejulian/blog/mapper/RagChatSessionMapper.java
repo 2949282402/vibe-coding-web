@@ -7,13 +7,14 @@ import org.apache.ibatis.annotations.Param;
 
 public interface RagChatSessionMapper {
 
-    RagChatSession selectBySessionId(@Param("sessionId") String sessionId);
+    RagChatSession selectBySessionId(@Param("userId") Long userId, @Param("sessionId") String sessionId);
 
-    List<RagChatSession> selectSessions(@Param("includeDeleted") boolean includeDeleted, @Param("limit") int limit);
+    List<RagChatSession> selectSessions(@Param("userId") Long userId, @Param("includeDeleted") boolean includeDeleted, @Param("limit") int limit);
 
     int insert(RagChatSession session);
 
     int updateLifecycle(
+            @Param("userId") Long userId,
             @Param("sessionId") String sessionId,
             @Param("title") String title,
             @Param("preview") String preview,
@@ -22,9 +23,9 @@ public interface RagChatSessionMapper {
             @Param("deleted") boolean deleted
     );
 
-    int updateTitle(@Param("sessionId") String sessionId, @Param("title") String title);
+    int updateTitle(@Param("userId") Long userId, @Param("sessionId") String sessionId, @Param("title") String title);
 
-    int markDeleted(@Param("sessionId") String sessionId, @Param("deleted") boolean deleted);
+    int markDeleted(@Param("userId") Long userId, @Param("sessionId") String sessionId, @Param("deleted") boolean deleted);
 
-    int deleteBySessionId(@Param("sessionId") String sessionId);
+    int deleteBySessionId(@Param("userId") Long userId, @Param("sessionId") String sessionId);
 }

@@ -6,6 +6,7 @@
 
     <resultMap id="RagChatSessionResultMap" type="com.hejulian.blog.entity.RagChatSession">
         <id property="sessionId" column="session_id"/>
+        <result property="userId" column="user_id"/>
         <result property="title" column="title"/>
         <result property="preview" column="preview"/>
         <result property="messageCount" column="message_count"/>
@@ -16,17 +17,19 @@
     </resultMap>
 
     <select id="selectBySessionId" resultMap="RagChatSessionResultMap">
-        SELECT session_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
+        SELECT session_id, user_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
         FROM rag_chat_sessions
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
     </select>
 
     <select id="selectSessions" resultMap="RagChatSessionResultMap">
-        SELECT session_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
+        SELECT session_id, user_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
         FROM rag_chat_sessions
         <where>
+            user_id = #{userId}
             <if test="includeDeleted == false">
-                deleted = FALSE
+                AND deleted = FALSE
             </if>
         </where>
         ORDER BY updated_at DESC, created_at DESC
@@ -35,9 +38,9 @@
 
     <insert id="insert" parameterType="com.hejulian.blog.entity.RagChatSession">
         INSERT INTO rag_chat_sessions (
-            session_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
+            session_id, user_id, title, preview, message_count, manual_title, deleted, created_at, updated_at
         ) VALUES (
-            #{sessionId}, #{title}, #{preview}, #{messageCount}, #{manualTitle}, #{deleted}, #{createdAt}, #{updatedAt}
+            #{sessionId}, #{userId}, #{title}, #{preview}, #{messageCount}, #{manualTitle}, #{deleted}, #{createdAt}, #{updatedAt}
         )
     </insert>
 
@@ -49,7 +52,8 @@
             message_count = #{messageCount},
             deleted = #{deleted},
             updated_at = #{updatedAt}
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
     </update>
 
     <update id="updateTitle">
@@ -58,7 +62,8 @@
             title = #{title},
             manual_title = TRUE,
             updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
     </update>
 
     <update id="markDeleted">
@@ -66,12 +71,14 @@
         SET
             deleted = #{deleted},
             updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
     </update>
 
     <delete id="deleteBySessionId">
         DELETE FROM rag_chat_sessions
-        WHERE session_id = #{sessionId}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
     </delete>
 
 </mapper>
