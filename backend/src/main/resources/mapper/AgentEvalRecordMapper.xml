@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.agent.mapper.AgentEvalRecordMapper">
+
+    <resultMap id="AgentEvalRecordResultMap" type="com.hejulian.blog.agent.entity.AgentEvalRecord">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="scoreOverall" column="score_overall"/>
+        <result property="scoreGrounding" column="score_grounding"/>
+        <result property="scoreHelpfulness" column="score_helpfulness"/>
+        <result property="scoreStyle" column="score_style"/>
+        <result property="issueTypes" column="issue_types"/>
+        <result property="feedbackNote" column="feedback_note"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectByTaskId" resultMap="AgentEvalRecordResultMap">
+        SELECT id, task_id, user_id, score_overall, score_grounding, score_helpfulness, score_style, issue_types, feedback_note, created_at
+        FROM agent_eval_record
+        WHERE task_id = #{taskId}
+        LIMIT 1
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1) FROM agent_eval_record
+    </select>
+
+    <select id="averageOverall" resultType="double">
+        SELECT ROUND(AVG(score_overall), 2)
+        FROM agent_eval_record
+    </select>
+
+    <select id="averageGrounding" resultType="double">
+        SELECT ROUND(AVG(score_grounding), 2)
+        FROM agent_eval_record
+    </select>
+
+    <select id="averageHelpfulness" resultType="double">
+        SELECT ROUND(AVG(score_helpfulness), 2)
+        FROM agent_eval_record
+    </select>
+
+    <select id="averageStyle" resultType="double">
+        SELECT ROUND(AVG(score_style), 2)
+        FROM agent_eval_record
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.agent.entity.AgentEvalRecord" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_eval_record (
+            task_id, user_id, score_overall, score_grounding, score_helpfulness, score_style, issue_types, feedback_note, created_at
+        )
+        VALUES (
+            #{taskId}, #{userId}, #{scoreOverall}, #{scoreGrounding}, #{scoreHelpfulness}, #{scoreStyle}, #{issueTypes}, #{feedbackNote}, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+</mapper>
+

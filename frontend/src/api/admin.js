@@ -26,3 +26,6 @@ export const reviewCommentApi = (id, status) => http.put(`/admin/comments/${id}/
 export const fetchAdminRagFeedbackApi = (params) => http.get('/admin/rag-feedback', { params });
 export const exportAdminRagFeedbackCsvApi = (params) =>
   http.get('/admin/rag-feedback/export', { params, responseType: 'blob' });
+export const fetchAdminAgentTasksApi = (params) => http.get('/admin/agent/tasks', { params });
+export const fetchAdminAgentTaskTraceApi = (taskId, params) => http.get(`/admin/agent/tasks/${taskId}/trace`, { params });
+export const fetchAdminAgentToolCallsApi = (params) => http.get('/admin/agent/tool-calls', { params });

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.agent.mapper.AgentMemoryHitMapper">
+
+    <resultMap id="AgentMemoryHitResultMap" type="com.hejulian.blog.agent.entity.AgentMemoryHit">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="memoryId" column="memory_id"/>
+        <result property="hitReason" column="hit_reason"/>
+        <result property="usedInStep" column="used_in_step"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectByTaskId" resultMap="AgentMemoryHitResultMap">
+        SELECT id, task_id, memory_id, hit_reason, used_in_step, created_at
+        FROM agent_memory_hit
+        WHERE task_id = #{taskId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="selectByTaskIdPaged" resultMap="AgentMemoryHitResultMap">
+        SELECT id, task_id, memory_id, hit_reason, used_in_step, created_at
+        FROM agent_memory_hit
+        WHERE task_id = #{taskId}
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectAllPaged" resultMap="AgentMemoryHitResultMap">
+        SELECT id, task_id, memory_id, hit_reason, used_in_step, created_at
+        FROM agent_memory_hit
+        ORDER BY id ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1)
+        FROM agent_memory_hit
+    </select>
+
+    <select id="countByTaskId" resultType="long">
+        SELECT COUNT(1)
+        FROM agent_memory_hit
+        WHERE task_id = #{taskId}
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.agent.entity.AgentMemoryHit" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_memory_hit (
+            task_id, memory_id, hit_reason, used_in_step, created_at
+        )
+        VALUES (
+            #{taskId}, #{memoryId}, #{hitReason}, #{usedInStep}, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+</mapper>

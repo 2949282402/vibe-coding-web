@@ -17,7 +17,8 @@ public final class RagDtos {
             @Max(value = 8, message = "topK must not exceed 8")
             Integer topK,
             String sessionId,
-            String searchMode
+            String searchMode,
+            String answerMode
     ) {
     }
 
@@ -52,7 +53,8 @@ public final class RagDtos {
             @Min(value = 1, message = "topK must be at least 1")
             @Max(value = 8, message = "topK must not exceed 8")
             Integer topK,
-            String searchMode
+            String searchMode,
+            String answerMode
     ) {
     }
 

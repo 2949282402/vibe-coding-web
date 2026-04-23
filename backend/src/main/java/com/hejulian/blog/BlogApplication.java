@@ -9,7 +9,7 @@ import org.springframework.cache.annotation.EnableCaching;
 @SpringBootApplication
 @ConfigurationPropertiesScan
 @EnableCaching
-@MapperScan("com.hejulian.blog.mapper")
+@MapperScan({"com.hejulian.blog.mapper", "com.hejulian.blog.agent.mapper"})
 public class BlogApplication {
 
     public static void main(String[] args) {

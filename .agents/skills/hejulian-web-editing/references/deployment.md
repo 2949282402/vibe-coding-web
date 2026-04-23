@@ -1,26 +1,22 @@
 # Deployment Reference
 
-Read this file only for Docker, nginx, uploads exposure, bind mounts, or runtime delivery tasks.
+Use for Docker, nginx, runtime config, logs, uploads exposure, SSE buffering, and static delivery.
 
-## Deployment structure
+## Root deployment files
 
-Main files:
+- Compose: `docker-compose.yml`
+- Backend image: `backend/Dockerfile`, `backend/docker-entrypoint.sh`
+- Frontend image: `frontend/Dockerfile`, `frontend/docker-entrypoint.sh`
+- Frontend nginx template: `frontend/nginx/default.conf.template`
+- Checked-in nginx config: `frontend/nginx/default.conf`
+- Optional external nginx sample: `deploy/nginx/hejulian-blog.conf`
+- Runtime config: `backend/src/main/resources/application.yml`
+- SQL bootstrap: `sql/blog_mysql_init.sql`
+- Logs: `logs/YYYY-MM-DD/`
 
-- root orchestration: `docker-compose.yml`
-- frontend image: `frontend/Dockerfile`
-- frontend nginx template: `frontend/nginx/default.conf.template`
-- checked-in nginx config: `frontend/nginx/default.conf`
-- frontend entrypoint: `frontend/docker-entrypoint.sh`
-- backend uploads exposure: `backend/src/main/java/com/hejulian/blog/config/WebConfig.java`
-- backend runtime config: `backend/src/main/resources/application.yml`
+## Docker services
 
-Optional local model bridge:
-
-- `llm-bridge/`
-
-## Docker compose structure
-
-The project typically runs with these services:
+Typical services:
 
 - `mysql`
 - `redis`
@@ -29,89 +25,60 @@ The project typically runs with these services:
 - `frontend`
 - optional `llm-bridge`
 
-When editing `docker-compose.yml`, check:
-
-- ports
-- environment variables
-- bind mounts
-- volume mounts
-- health checks
-- service dependencies
-
 ## Frontend delivery
 
-The frontend container serves:
+The frontend container:
 
-- built Vue app from nginx
-- `/resume` static page via mounted files under `frontend/public/resume/`
-- resume avatar or related assets via mounted files under `frontend/public/images/`
+- builds Vue app with `npm run build`.
+- serves `dist/` with nginx.
+- generates `/etc/nginx/conf.d/default.conf` from `frontend/nginx/default.conf.template` at container start.
+- serves `/resume` static files via mounted `frontend/public/resume/`.
+- serves public images via mounted `frontend/public/images/`.
 
-Important assumptions:
-
-- `/resume` is served by nginx, not Vue Router
-- mounted resume content should refresh without rebuilding the frontend image
-- nginx config changes usually require recreating the frontend container once
+Important: for Docker builds, edit `default.conf.template`; changing only `default.conf` does not affect the generated container config.
 
 ## Backend delivery
 
-The backend serves:
+The backend container:
 
-- JSON APIs
-- RAG APIs
-- SSE endpoint for streaming chat
-- uploaded files exposed through `WebConfig.java`
+- builds with Maven inside Docker.
+- exposes JSON APIs, RAG/Ask SSE, Agent SSE, uploads, and actuator health.
+- writes dated logs through mounted `./logs`.
 
-If the task changes file exposure, check both backend resource mapping and frontend or nginx path assumptions.
+## SSE routes that must not buffer
 
-## Nginx structure
+- RAG/Ask stream: `/api/public/rag/ask/stream`
+- Agent task stream: `/api/agent/tasks/{taskId}/stream`
 
-Start with:
+Nginx needs:
 
-- `frontend/nginx/default.conf.template`
-- `frontend/nginx/default.conf`
+- `proxy_buffering off;`
+- `proxy_cache off;`
+- long `proxy_read_timeout` and `proxy_send_timeout`
+- `add_header X-Accel-Buffering no;`
 
-Typical responsibilities:
+## Runtime model config
 
-- serve the SPA
-- proxy `/api/**`
-- proxy uploads or health endpoints if configured
-- special-case static resume route
+- System/env defaults are in `docker-compose.yml` and `application.yml`.
+- User Qwen API key/model/capability live in user settings through auth APIs.
+- `DASHSCOPE_API_KEY` can provide system-level fallback, but user runtime is preferred for RAG/Ask/Agent chat.
 
-If the task changes route behavior, inspect both the template and generated config in the repo.
+## Logs
 
-## Runtime config
+Use dated directories under `logs/YYYY-MM-DD/`.
+Typical files include backend/frontend/mysql/redis/qdrant logs depending on running services.
 
-Read `backend/src/main/resources/application.yml` when changing:
+## Validation commands
 
-- service ports
-- datasource defaults
-- Redis config
-- Qdrant config
-- RAG model or timeout settings
-- upload directory defaults
+- Frontend only: `npm run build` in `frontend/`.
+- Backend only: `docker compose build backend` from repo root.
+- Full rebuild: `docker compose up -d --build`.
+- Restart existing built services: `docker compose up -d backend frontend`.
 
-## Upload and static file delivery
+## Common pitfalls
 
-For upload-related delivery, inspect:
-
-- `backend/src/main/java/com/hejulian/blog/controller/admin/AdminUploadController.java`
-- `backend/src/main/java/com/hejulian/blog/service/UploadStorageService.java`
-- `backend/src/main/java/com/hejulian/blog/config/WebConfig.java`
-
-For resume-related delivery, inspect:
-
-- `frontend/public/resume/index.html`
-- `frontend/public/images/`
-- `docker-compose.yml`
-- nginx config
-
-## Validation
-
-For deployment or delivery changes, verify what applies:
-
-- path in repo matches path mounted into container
-- nginx route matches expected URL
-- container recreation is done if config or mounts changed
-- frontend app routes and static routes are not fighting each other
-
-If the task is specifically about `/resume`, also read `references/resume.md`.
+- Editing generated nginx config but not the template.
+- Forgetting container recreation after nginx/template changes.
+- Assuming `/resume` is a Vue route.
+- Debugging SSE only in Java while nginx is buffering.
+- Forgetting Docker build context: frontend template is copied into the image.

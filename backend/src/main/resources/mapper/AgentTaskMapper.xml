@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.agent.mapper.AgentTaskMapper">
+
+    <resultMap id="AgentTaskResultMap" type="com.hejulian.blog.agent.entity.AgentTask">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="taskType" column="task_type"/>
+        <result property="title" column="title"/>
+        <result property="goal" column="goal"/>
+        <result property="status" column="status"/>
+        <result property="executionMode" column="execution_mode"/>
+        <result property="searchScope" column="search_scope"/>
+        <result property="allowDraftWrite" column="allow_draft_write"/>
+        <result property="currentStep" column="current_step"/>
+        <result property="finalOutputSummary" column="final_output_summary"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="completedAt" column="completed_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1)
+        FROM agent_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    LOWER(COALESCE(title, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                    OR LOWER(COALESCE(goal, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                )
+            </if>
+        </where>
+    </select>
+
+    <select id="selectAll" resultMap="AgentTaskResultMap">
+        SELECT
+            id, user_id, session_id, task_type, title, goal, status, execution_mode,
+            search_scope, allow_draft_write, current_step, final_output_summary,
+            error_message, started_at, completed_at, created_at, updated_at
+        FROM agent_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    LOWER(COALESCE(title, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                    OR LOWER(COALESCE(goal, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                )
+            </if>
+        </where>
+        ORDER BY created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="selectById" resultMap="AgentTaskResultMap">
+        SELECT
+            id, user_id, session_id, task_type, title, goal, status, execution_mode,
+            search_scope, allow_draft_write, current_step, final_output_summary,
+            error_message, started_at, completed_at, created_at, updated_at
+        FROM agent_task
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByIdAndUserId" resultMap="AgentTaskResultMap">
+        SELECT
+            id, user_id, session_id, task_type, title, goal, status, execution_mode,
+            search_scope, allow_draft_write, current_step, final_output_summary,
+            error_message, started_at, completed_at, created_at, updated_at
+        FROM agent_task
+        WHERE id = #{id}
+          AND user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.agent.entity.AgentTask" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_task (
+            user_id, session_id, task_type, title, goal, status, execution_mode, search_scope,
+            allow_draft_write, current_step, final_output_summary, error_message, started_at, completed_at, created_at, updated_at
+        )
+        VALUES (
+            #{userId}, #{sessionId}, #{taskType}, #{title}, #{goal}, #{status}, #{executionMode},
+            #{searchScope}, #{allowDraftWrite}, #{currentStep}, #{finalOutputSummary}, #{errorMessage}, #{startedAt}, #{completedAt}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE agent_task
+        SET user_id = #{task.userId},
+            session_id = #{task.sessionId},
+            task_type = #{task.taskType},
+            title = #{task.title},
+            goal = #{task.goal},
+            status = #{task.status},
+            execution_mode = #{task.executionMode},
+            search_scope = #{task.searchScope},
+            allow_draft_write = #{task.allowDraftWrite},
+            current_step = #{task.currentStep},
+            final_output_summary = #{task.finalOutputSummary},
+            error_message = #{task.errorMessage},
+            started_at = #{task.startedAt},
+            completed_at = #{task.completedAt},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{task.id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE agent_task
+        SET status = COALESCE(#{status}, status),
+            current_step = COALESCE(#{currentStep}, current_step),
+            final_output_summary = COALESCE(#{finalOutputSummary}, final_output_summary),
+            error_message = COALESCE(#{errorMessage}, error_message),
+            started_at = COALESCE(#{startedAt}, started_at),
+            completed_at = COALESCE(#{completedAt}, completed_at),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+</mapper>

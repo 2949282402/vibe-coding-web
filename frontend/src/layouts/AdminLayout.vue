@@ -14,7 +14,9 @@ const menus = computed(() => [
   { label: preferences.t('admin.menuPosts'), to: '/admin/posts' },
   { label: preferences.t('admin.menuTaxonomy'), to: '/admin/taxonomies' },
   { label: preferences.t('admin.menuComments'), to: '/admin/comments' },
-  { label: preferences.t('admin.menuRagFeedback'), to: '/admin/rag-feedback' }
+  { label: preferences.t('admin.menuRagFeedback'), to: '/admin/rag-feedback' },
+  { label: preferences.locale === 'zh-CN' ? 'Agent 运维' : 'Agent Ops', to: '/admin/agents' },
+  { label: preferences.locale === 'zh-CN' ? 'Agent 工具调用' : 'Agent Tool Calls', to: '/admin/agent-tool-calls' }
 ]);
 
 const logout = () => {

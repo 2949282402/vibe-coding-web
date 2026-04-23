@@ -20,21 +20,12 @@ export const purgeKnowledgeSessionApi = (sessionId) =>
 export const restoreKnowledgeSessionApi = (sessionId) =>
   http.post(`/public/rag/sessions/${sessionId}/restore`);
 export const submitKnowledgeFeedbackApi = (payload) => http.post('/public/rag/feedback', payload);
+export const createAgentTaskApi = (payload) => http.post('/agent/tasks', payload, { timeout: 120000 });
+export const fetchAgentTaskDetailApi = (taskId) => http.get(`/agent/tasks/${taskId}`);
 export const askKnowledgeApi = (payload) => http.post('/public/rag/ask', payload, { timeout: 300000 });
 export const replayKnowledgeApi = (payload) => http.post('/public/rag/replay', payload, { timeout: 300000 });
 
-export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
-  const token = localStorage.getItem('blog-auth-token') || localStorage.getItem('blog-admin-token');
-  const response = await fetch('/api/public/rag/ask/stream', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: JSON.stringify(payload),
-    signal: handlers.signal
-  });
-
+const readSseStream = async (response, handlers = {}) => {
   if (!response.ok || !response.body) {
     const message = await response.text();
     throw new Error(message || 'Stream request failed');
@@ -44,7 +35,7 @@ export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
 
-  const emitEvent = (rawEvent) => {
+  const emitEvent = async (rawEvent) => {
     const lines = rawEvent.split('\n');
     let eventName = 'message';
     const dataLines = [];
@@ -62,8 +53,14 @@ export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
       return;
     }
 
-    const payloadData = JSON.parse(dataLines.join('\n'));
-    handlers.onEvent?.(eventName, payloadData);
+    const rawData = dataLines.join('\n');
+    let payloadData = rawData;
+    try {
+      payloadData = JSON.parse(rawData);
+    } catch {
+      payloadData = rawData;
+    }
+    await handlers.onEvent?.(eventName, payloadData);
   };
 
   while (true) {
@@ -75,7 +72,7 @@ export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
       const rawEvent = buffer.slice(0, separatorIndex).trim();
       buffer = buffer.slice(separatorIndex + 2);
       if (rawEvent) {
-        emitEvent(rawEvent);
+        await emitEvent(rawEvent);
       }
       separatorIndex = buffer.indexOf('\n\n');
     }
@@ -83,9 +80,36 @@ export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
     if (done) {
       const finalEvent = buffer.trim();
       if (finalEvent) {
-        emitEvent(finalEvent);
+        await emitEvent(finalEvent);
       }
       break;
     }
   }
+};
+
+export const streamAgentTaskApi = async (taskId, handlers = {}) => {
+  const token = localStorage.getItem('blog-auth-token') || localStorage.getItem('blog-admin-token');
+  const response = await fetch(`/api/agent/tasks/${taskId}/stream`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    signal: handlers.signal
+  });
+  await readSseStream(response, handlers);
+};
+
+export const askKnowledgeStreamApi = async (payload, handlers = {}) => {
+  const token = localStorage.getItem('blog-auth-token') || localStorage.getItem('blog-admin-token');
+  const response = await fetch('/api/public/rag/ask/stream', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify(payload),
+    signal: handlers.signal
+  });
+
+  await readSseStream(response, handlers);
 };

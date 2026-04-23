@@ -4,15 +4,18 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fetchQwenConfigApi, saveQwenConfigApi } from '../api/auth';
 import {
+  createAgentTaskApi,
   askKnowledgeApi,
   askKnowledgeStreamApi,
   deleteKnowledgeSessionApi,
+  fetchAgentTaskDetailApi,
   fetchKnowledgeHistoryApi,
   fetchKnowledgeSessionsApi,
   purgeKnowledgeSessionApi,
   replayKnowledgeApi,
   renameKnowledgeSessionApi,
   restoreKnowledgeSessionApi,
+  streamAgentTaskApi,
   submitKnowledgeFeedbackApi
 } from '../api/blog';
 import { renderMarkdown } from '../utils/markdown';
@@ -20,6 +23,7 @@ import { useAuthStore } from '../stores/auth';
 import { usePreferencesStore } from '../stores/preferences';
 
 const STORAGE_SESSION_KEY = 'blog-rag-session-id';
+const STORAGE_CHAT_MODE_KEY = 'blog-knowledge-chat-mode';
 const STORAGE_SEARCH_MODE_KEY = 'blog-rag-search-mode';
 const STORAGE_SESSION_LIST_CACHE_PREFIX = 'blog-rag-session-list-cache';
 const STORAGE_HISTORY_CACHE_PREFIX = 'blog-rag-history-cache';
@@ -27,7 +31,11 @@ const DEFAULT_TOP_K = 4;
 const SCROLL_STICKY_THRESHOLD = 96;
 const SOURCE_PREVIEW_LIMIT = 4;
 const LOCAL_CACHE_TTL = 5 * 60 * 1000;
+const CHAT_MODE_RAG = 'RAG';
+const CHAT_MODE_ASK = 'ASK';
+const CHAT_MODE_AGENT = 'AGENT';
 const SEARCH_MODE_LOCAL_ONLY = 'LOCAL_ONLY';
+const SEARCH_MODE_WEB_ONLY = 'WEB_ONLY';
 const SEARCH_MODE_LOCAL_AND_WEB = 'LOCAL_AND_WEB';
 
 const preferences = usePreferencesStore();
@@ -47,6 +55,7 @@ const feedbackSubmittingId = ref(null);
 const editingMessageId = ref(null);
 const editingMessageContent = ref('');
 const answerVariantSelections = ref({});
+const chatMode = ref(readChatMode());
 const searchMode = ref(readSearchMode());
 const activeSessionId = ref(readSessionId());
 const activeSourceMessageId = ref(null);
@@ -72,6 +81,7 @@ const chatStageRef = ref(null);
 const isChatStageFullscreen = ref(false);
 
 let activeController = null;
+let activeAgentPoller = null;
 
 function getSessionStorageKey() {
   const scope = String(authStore.user?.id || authStore.user?.username || 'guest').trim();
@@ -84,17 +94,46 @@ function normalizeSessionId(value) {
 }
 
 function normalizeSearchMode(value) {
-  return String(value || '').trim().toUpperCase() === SEARCH_MODE_LOCAL_AND_WEB
-    ? SEARCH_MODE_LOCAL_AND_WEB
-    : SEARCH_MODE_LOCAL_ONLY;
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === SEARCH_MODE_LOCAL_AND_WEB) {
+    return SEARCH_MODE_LOCAL_AND_WEB;
+  }
+  if (normalized === SEARCH_MODE_WEB_ONLY) {
+    return SEARCH_MODE_WEB_ONLY;
+  }
+  return SEARCH_MODE_LOCAL_ONLY;
+}
+
+function normalizeChatMode(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === CHAT_MODE_AGENT) {
+    return CHAT_MODE_AGENT;
+  }
+  if (normalized === CHAT_MODE_ASK) {
+    return CHAT_MODE_ASK;
+  }
+  return CHAT_MODE_RAG;
+}
+
+function isWebSearchModeValue(value) {
+  const normalized = normalizeSearchMode(value);
+  return normalized === SEARCH_MODE_WEB_ONLY || normalized === SEARCH_MODE_LOCAL_AND_WEB;
 }
 
 function readSearchMode() {
   return normalizeSearchMode(localStorage.getItem(STORAGE_SEARCH_MODE_KEY));
 }
 
+function readChatMode() {
+  return normalizeChatMode(localStorage.getItem(STORAGE_CHAT_MODE_KEY));
+}
+
 function persistSearchMode() {
   localStorage.setItem(STORAGE_SEARCH_MODE_KEY, searchMode.value);
+}
+
+function persistChatMode() {
+  localStorage.setItem(STORAGE_CHAT_MODE_KEY, chatMode.value);
 }
 
 function readSessionId() {
@@ -240,8 +279,10 @@ const copy = computed(() => {
       sessionEmpty: '还没有历史会话，发起第一个问题后会显示在这里。',
       deletedEmpty: '暂无已删除会话。',
       historyTitle: '当前对话',
+      modeAsk: 'Ask',
       modeLlm: '模型回答',
       modeRetrieval: '检索回答',
+      modeAgent: 'Agent',
       strictCitation: '严格引用',
       userRole: '用户',
       assistantRole: '助手',
@@ -250,9 +291,15 @@ const copy = computed(() => {
       composerHint: 'Enter 发送，Ctrl + Enter 换行',
       searchModeTitle: '检索范围',
       searchModeLocal: '仅站内',
+      searchModeWebOnly: '仅联网',
       searchModeHybrid: '站内 + 联网',
       searchModeLocalShort: '站内',
-      searchModeHybridShort: '联网',
+      searchModeWebOnlyShort: '联网',
+      searchModeHybridShort: '混合',
+      chatModeTitle: '响应模式',
+      chatModeRag: 'RAG',
+      chatModeAsk: 'Ask',
+      chatModeAgent: 'Agent',
       sourceHint: '回答里的 [1]、[2] 会映射到这里的参考来源。',
       noSources: '本轮还没有来源卡片。',
       noFollowUps: '回答完成后，这里会给出下一步追问建议。',
@@ -287,7 +334,14 @@ const copy = computed(() => {
       webSourceFallback: '外部网页',
       scoreLabel: '相关度',
       viewMoreSources: '查看更多（+{count}）',
-      collapseSources: '收起'
+      collapseSources: '收起',
+      agentTraceTitle: '执行轨迹',
+      agentTraceTask: '任务',
+      agentTraceTools: '工具',
+      agentTraceNoTools: '暂无工具调用',
+      agentTracePermission: '权限',
+      agentTraceSuccess: '成功',
+      agentTraceFailed: '失败'
     };
   }
 
@@ -312,8 +366,10 @@ const copy = computed(() => {
     sessionEmpty: 'No chat sessions yet. Your first question will create one.',
     deletedEmpty: 'No deleted sessions.',
     historyTitle: 'Conversation',
+    modeAsk: 'Ask',
     modeLlm: 'Model Answer',
     modeRetrieval: 'Retrieval Answer',
+    modeAgent: 'Agent',
     strictCitation: 'Strict Citation',
     userRole: 'You',
     assistantRole: 'Assistant',
@@ -322,9 +378,15 @@ const copy = computed(() => {
     composerHint: 'Press Enter to send, Ctrl + Enter for newline',
     searchModeTitle: 'Search Scope',
     searchModeLocal: 'Local Only',
+    searchModeWebOnly: 'Web Only',
     searchModeHybrid: 'Local + Web',
     searchModeLocalShort: 'Local',
-    searchModeHybridShort: 'Web',
+    searchModeWebOnlyShort: 'Web',
+    searchModeHybridShort: 'Hybrid',
+    chatModeTitle: 'Response mode',
+    chatModeRag: 'RAG',
+    chatModeAsk: 'Ask',
+    chatModeAgent: 'Agent',
     sourceHint: 'Citation markers like [1] and [2] map to the sources here.',
     noSources: 'No source panel yet for this turn.',
     noFollowUps: 'Follow-up suggestions appear here after a completed answer.',
@@ -359,7 +421,14 @@ const copy = computed(() => {
     webSourceFallback: 'External page',
     scoreLabel: 'Score',
     viewMoreSources: 'View more (+{count})',
-    collapseSources: 'Show less'
+    collapseSources: 'Show less',
+    agentTraceTitle: 'Execution Trace',
+    agentTraceTask: 'Task',
+    agentTraceTools: 'Tools',
+    agentTraceNoTools: 'No tool calls',
+    agentTracePermission: 'Permission',
+    agentTraceSuccess: 'Success',
+    agentTraceFailed: 'Failed'
   };
 });
 
@@ -388,7 +457,6 @@ const feedbackCopy = computed(() => {
     disclosure: 'Submitting feedback lets admins review this feedback together with the related chat history.'
   };
 });
-
 function messageSourceAnchorPrefix(messageId) {
   return `rag-source-${messageId || 'message'}`;
 }
@@ -448,6 +516,228 @@ function selectAnswerVariant(messageId, index) {
   };
 }
 
+function isAgentMessage(message) {
+  return String(message?.mode || '').toLowerCase() === 'agent';
+}
+
+function buildAgentTrace(detail) {
+  if (!detail || typeof detail !== 'object') {
+    return null;
+  }
+
+  const steps = Array.isArray(detail.steps) ? detail.steps : [];
+  const toolCalls = Array.isArray(detail.toolCalls) ? detail.toolCalls : [];
+  const finalArticle = normalizeAgentFinalArticle(detail.task);
+  if (!steps.length && !toolCalls.length && !finalArticle) {
+    return null;
+  }
+
+  return {
+    task: detail.task || null,
+    steps,
+    toolCalls,
+    finalArticle,
+    renderedFinalArticle: finalArticle ? renderMarkdown(finalArticle) : ''
+  };
+}
+
+function normalizeAgentFinalArticle(task) {
+  const raw = String(task?.finalOutputSummary || '').trim();
+  if (!raw) {
+    return '';
+  }
+  return raw.replace(/\n\nPublished post:.+$/s, '').trim();
+}
+
+function normalizeAgentAnswer(task) {
+  const raw = String(task?.finalOutputSummary || '').trim();
+  if (!raw) {
+    const step = Number(task?.currentStep || 0);
+    const status = String(task?.status || 'PENDING');
+    return `Agent task ${task?.id ? `#${task.id}` : ''} is ${status.toLowerCase()}${step ? ` at step ${step}` : ''}.`;
+  }
+
+  const publishedMatch = raw.match(/Published post:\s*(.+?)\s*\((\/[^)]+)\)\s*$/);
+  const article = raw.replace(/\n\nPublished post:.+$/s, '').trim();
+  if (!publishedMatch) {
+    return 'Agent 已完成任务，完整内容见下方 Execution Trace 的最终文章。';
+  }
+
+  return [
+    `已发布：${publishedMatch[1]}`,
+    `访问路径：${publishedMatch[2]}`,
+    '',
+    '完整文章已放在下方 Execution Trace 的最后。'
+  ].join('\n');
+}
+
+function isAgentTaskTerminal(task) {
+  const status = String(task?.status || '').toUpperCase();
+  return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status);
+}
+
+function hasAgentTrace(message) {
+  return isAgentMessage(message) && Boolean(message?.agentTrace);
+}
+
+function getToolCallsForStep(message, stepId) {
+  const calls = Array.isArray(message?.agentTrace?.toolCalls) ? message.agentTrace.toolCalls : [];
+  return calls.filter((call) => call.stepId === stepId);
+}
+
+function formatAgentLatency(value) {
+  const latency = Number(value);
+  if (!Number.isFinite(latency) || latency <= 0) {
+    return '';
+  }
+  return latency >= 1000 ? `${(latency / 1000).toFixed(1)}s` : `${Math.round(latency)}ms`;
+}
+
+function stopAgentPolling() {
+  if (activeAgentPoller) {
+    clearTimeout(activeAgentPoller);
+    activeAgentPoller = null;
+  }
+}
+
+function normalizeAgentProgress(payload) {
+  if (typeof payload === 'string') {
+    return payload.trim();
+  }
+  return String(payload?.message || '').trim();
+}
+
+function buildAgentProgressEntry(payload) {
+  const message = normalizeAgentProgress(payload);
+  const timeText = payload?.createdAt
+    ? new Date(payload.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : '';
+  const prefix = timeText ? `[${timeText}] ` : '';
+  if (!message) {
+    return `${prefix}Agent is working...`;
+  }
+  const step = Number(payload?.currentStep || 0);
+  const status = String(payload?.status || 'RUNNING').toLowerCase();
+  return step ? `${prefix}步骤 ${step} · ${status}：${message}` : `${prefix}${status}：${message}`;
+}
+
+function buildAgentProgressContent(messages = [], latestPayload = null) {
+  const entries = Array.isArray(messages) && messages.length
+    ? messages
+    : [buildAgentProgressEntry(latestPayload)];
+  return [
+    '**Agent 正在工作，下面是实时消息流**',
+    '',
+    ...entries.map((entry) => `- ${entry}`),
+    '',
+    '完成后，最终文章会出现在 Execution Trace 的最后。'
+  ].join('\n');
+}
+
+function updateAgentProgressMessage(normalizedQuestion, taskId, payload) {
+  let resultContent = '';
+  const patch = (message) => {
+    if (message.role !== 'assistant' || message.taskId !== taskId) {
+      return message;
+    }
+    const nextEntry = buildAgentProgressEntry(payload);
+    const previous = Array.isArray(message.agentProgressMessages) ? message.agentProgressMessages : [];
+    const nextMessages = [...previous, nextEntry].slice(-12);
+    const content = buildAgentProgressContent(nextMessages, payload);
+    resultContent = content;
+    return {
+      ...message,
+      content,
+      agentProgress: payload,
+      agentProgressMessages: nextMessages,
+      pending: true
+    };
+  };
+
+  history.value = history.value.map(patch);
+  persistHistoryCache(activeSessionId.value, history.value);
+  result.value = {
+    ...(result.value || {}),
+    question: normalizedQuestion,
+    answer: resultContent,
+    mode: CHAT_MODE_AGENT.toLowerCase(),
+    history: history.value
+  };
+}
+
+function updateAgentTaskMessage(normalizedQuestion, detail) {
+  const task = detail?.task;
+  if (!task?.id) {
+    return;
+  }
+
+  const terminal = isAgentTaskTerminal(task);
+  const fallbackContent = normalizeAgentAnswer(task);
+  const agentTrace = buildAgentTrace(detail);
+  let resultContent = fallbackContent;
+  const patch = (message) => {
+    if (message.role !== 'assistant' || message.taskId !== task.id) {
+      return message;
+    }
+    const content = terminal
+      ? fallbackContent
+      : message.agentProgress
+        ? buildAgentProgressContent(message.agentProgressMessages, message.agentProgress)
+        : fallbackContent;
+    resultContent = content;
+    return {
+      ...message,
+      content,
+      agentTrace,
+      agentProgress: terminal ? null : message.agentProgress,
+      agentProgressMessages: terminal ? message.agentProgressMessages : message.agentProgressMessages,
+      pending: !terminal
+    };
+  };
+
+  history.value = history.value.map(patch);
+  persistHistoryCache(activeSessionId.value, history.value);
+  result.value = {
+    ...(result.value || {}),
+    question: normalizedQuestion,
+    answer: resultContent,
+    mode: CHAT_MODE_AGENT.toLowerCase(),
+    history: history.value
+  };
+}
+
+async function streamAgentTask(normalizedQuestion, taskId) {
+  const controller = new AbortController();
+  activeController = controller;
+  let terminalDetail = null;
+
+  await streamAgentTaskApi(taskId, {
+    signal: controller.signal,
+    onEvent: async (eventName, payload) => {
+      if (eventName === 'progress') {
+        updateAgentProgressMessage(normalizedQuestion, taskId, payload);
+        await scrollConversationToBottom();
+      }
+      if (eventName === 'snapshot' || eventName === 'done') {
+        terminalDetail = payload;
+        updateAgentTaskMessage(normalizedQuestion, payload);
+        await scrollConversationToBottom();
+      }
+      if (eventName === 'done') {
+        await loadSessions();
+      }
+      if (eventName === 'error') {
+        throw new Error(typeof payload === 'string' ? payload : 'Agent stream failed');
+      }
+    }
+  });
+
+  if (activeController === controller) {
+    activeController = null;
+  }
+  return terminalDetail;
+}
+
 const activeSession = computed(() =>
   sessions.value.find((item) => item.sessionId === activeSessionId.value && !item.deleted) || null
 );
@@ -461,10 +751,36 @@ const searchModeOptions = computed(() => [
     label: copy.value.searchModeLocal
   },
   {
+    value: SEARCH_MODE_WEB_ONLY,
+    label: copy.value.searchModeWebOnly || 'Web Only'
+  },
+  {
     value: SEARCH_MODE_LOCAL_AND_WEB,
     label: copy.value.searchModeHybrid
   }
 ]);
+const canUseAgentMode = computed(() => Boolean(authStore.isAdmin));
+const chatModeOptions = computed(() => {
+  const options = [
+    {
+      value: CHAT_MODE_RAG,
+      label: copy.value.chatModeRag || 'RAG'
+    },
+    {
+      value: CHAT_MODE_ASK,
+      label: copy.value.chatModeAsk || 'Ask'
+    }
+  ];
+  if (canUseAgentMode.value) {
+    options.push({
+      value: CHAT_MODE_AGENT,
+      label: copy.value.chatModeAgent || 'Agent'
+    });
+  }
+  return options;
+});
+const isAgentMode = computed(() => canUseAgentMode.value && chatMode.value === CHAT_MODE_AGENT);
+const isAskMode = computed(() => chatMode.value === CHAT_MODE_ASK);
 const canUseHybridSearch = computed(() => Boolean(qwenConfig.value.webSearchEnabled));
 const qwenCopy = computed(() =>
   preferences.locale === 'zh-CN'
@@ -478,10 +794,10 @@ const qwenCopy = computed(() =>
         apiKeyPlaceholder: '请输入你的千问 API Key',
         saveConfig: '保存并解析',
         model: '对话模型',
-        localOnlyLocked: '当前模型不支持联网搜索，已强制使用仅站内检索',
+        localOnlyLocked: '当前模型不支持联网搜索，已强制使用仅站内检索。',
         noModels: '保存 Key 后会显示可用模型列表',
         saved: '配置已保存',
-        editApiKey: '修改 API Key',
+        editApiKey: 'API Key',
         cancelEditApiKey: '取消修改'
       }
     : {
@@ -497,7 +813,7 @@ const qwenCopy = computed(() =>
         localOnlyLocked: 'This model does not support web search, so local retrieval is enforced.',
         noModels: 'Available models will appear after the key is saved',
         saved: 'Configuration saved',
-        editApiKey: 'Update API Key',
+        editApiKey: 'API Key',
         cancelEditApiKey: 'Cancel'
       }
 );
@@ -523,6 +839,17 @@ const uiCopy = computed(() =>
       }
 );
 const hasQwenConfig = computed(() => Boolean(qwenConfig.value.hasApiKey && qwenConfig.value.selectedModel));
+const canSubmitQuestion = computed(() => {
+  if (!authStore.isAuthenticated) {
+    return false;
+  }
+
+  if (isAgentMode.value) {
+    return !loading.value;
+  }
+
+  return hasQwenConfig.value && !loading.value;
+});
 const hasConversation = computed(
   () => history.value.length > 0 || Boolean(pendingTurn.value?.question) || streaming.value || Boolean(result.value?.answer)
 );
@@ -601,7 +928,7 @@ const timelineMessages = computed(() => {
           content,
           sources
         }),
-        pending: false,
+        pending: Boolean(message.pending),
         skeleton: false
       };
     }
@@ -654,7 +981,7 @@ const messageActionCopy = computed(() => {
     return {
       copy: '复制',
       edit: '修改提问',
-      retry: '重新回复',
+      retry: '重新回答',
       save: '发送修改后提问',
       cancel: '取消',
       copied: '消息已复制',
@@ -686,7 +1013,6 @@ const answerVariantCopy = computed(() =>
         label: 'Result {index}'
       }
 );
-
 const assistantMessagesWithSources = computed(() =>
   timelineMessages.value.filter(
     (message) => message.role === 'assistant' && !message.skeleton && Array.isArray(message.sources) && message.sources.length
@@ -843,6 +1169,9 @@ async function replayConversation(messageId, questionOverride = '') {
   if (!authStore.isAuthenticated || !hasQwenConfig.value) {
     return;
   }
+  if (isAgentMode.value) {
+    return;
+  }
   if (!messageId) {
     return;
   }
@@ -859,7 +1188,8 @@ async function replayConversation(messageId, questionOverride = '') {
       messageId,
       question: questionOverride || undefined,
       topK: DEFAULT_TOP_K,
-      searchMode: searchMode.value
+      searchMode: searchMode.value,
+      answerMode: currentAnswerMode()
     });
     applyResponse(res.data, { clearPending: true });
     await loadSessions();
@@ -967,6 +1297,7 @@ function syncRouteSession(sessionId) {
 }
 
 function stopStreaming() {
+  stopAgentPolling();
   if (activeController) {
     activeController.abort();
     activeController = null;
@@ -1112,6 +1443,9 @@ async function submitAnswerFeedback(message, helpful) {
   if (!message?.id || message.role !== 'assistant' || feedbackSubmittingId.value) {
     return;
   }
+  if (isAgentMessage(message)) {
+    return;
+  }
 
   let note = '';
   if (!helpful) {
@@ -1229,7 +1563,7 @@ async function loadQwenConfig() {
       webSearchEnabled: false,
       models: []
     };
-    if (!qwenConfig.value.webSearchEnabled && searchMode.value === SEARCH_MODE_LOCAL_AND_WEB) {
+    if (!qwenConfig.value.webSearchEnabled && isWebSearchModeValue(searchMode.value)) {
       searchMode.value = SEARCH_MODE_LOCAL_ONLY;
     }
   } catch (error) {
@@ -1312,7 +1646,7 @@ function createEmptyResult(normalizedQuestion) {
     sessionId: activeSessionId.value,
     question: normalizedQuestion,
     answer: '',
-    mode: 'llm',
+    mode: isAskMode.value ? 'ask' : 'llm',
     searchMode: searchMode.value,
     llmEnabled: true,
     indexedPosts: result.value?.indexedPosts || 0,
@@ -1320,8 +1654,94 @@ function createEmptyResult(normalizedQuestion) {
     followUpQuestions: [],
     sources: [],
     history: history.value,
-    strictCitation: true
+    strictCitation: !isAskMode.value
   };
+}
+
+function currentAnswerMode() {
+  return isAskMode.value ? CHAT_MODE_ASK : CHAT_MODE_RAG;
+}
+
+function buildAgentTaskResult(normalizedQuestion, task, detail = null) {
+  const now = new Date().toISOString();
+  const taskId = task?.id ?? null;
+  const summary = normalizeAgentAnswer(task);
+  const existingHistory = Array.isArray(history.value) ? history.value : [];
+  const agentTrace = buildAgentTrace(detail);
+  return {
+    sessionId: activeSessionId.value,
+    question: normalizedQuestion,
+    answer: summary,
+    mode: CHAT_MODE_AGENT.toLowerCase(),
+    searchMode: searchMode.value,
+    llmEnabled: true,
+    indexedPosts: 0,
+    indexedChunks: 0,
+    followUpQuestions: [],
+    sources: [],
+    citations: [],
+    history: [
+      ...existingHistory,
+      {
+        id: `agent-user-${Date.now()}`,
+        role: 'user',
+        content: normalizedQuestion,
+        mode: CHAT_MODE_AGENT.toLowerCase(),
+        sources: [],
+        citations: [],
+        createdAt: now,
+        feedbackHelpful: null,
+        feedbackNote: null,
+        feedbackAt: null
+      },
+      {
+        id: `agent-assistant-${Date.now()}`,
+        role: 'assistant',
+        content: summary,
+        mode: CHAT_MODE_AGENT.toLowerCase(),
+        sources: [],
+        citations: [],
+        createdAt: now,
+        taskId,
+        agentTrace,
+        feedbackHelpful: null,
+        feedbackNote: null,
+        feedbackAt: null
+      }
+    ],
+    strictCitation: false
+  };
+}
+
+async function runAgentRequest(normalizedQuestion) {
+  loading.value = true;
+  streaming.value = false;
+  shouldStickToBottom.value = true;
+  pendingTurn.value = createPendingTurn(normalizedQuestion);
+  try {
+    const response = await createAgentTaskApi({
+      sessionId: activeSessionId.value,
+      goal: normalizedQuestion,
+      taskType: 'BLOG_DRAFT',
+      executionMode: 'AUTO',
+      searchScope: searchMode.value,
+      allowDraftWrite: true
+    });
+    const task = response?.data;
+    applyResponse(buildAgentTaskResult(normalizedQuestion, task, null), { clearPending: true });
+    await scrollConversationToBottom(true);
+    if (task?.id) {
+      await streamAgentTask(normalizedQuestion, task.id);
+    }
+  } finally {
+    stopAgentPolling();
+    if (activeController) {
+      activeController.abort();
+      activeController = null;
+    }
+    loading.value = false;
+    streaming.value = false;
+  }
 }
 
 async function runStreamRequest(normalizedQuestion) {
@@ -1339,7 +1759,8 @@ async function runStreamRequest(normalizedQuestion) {
         sessionId: activeSessionId.value,
         question: normalizedQuestion,
         topK: DEFAULT_TOP_K,
-        searchMode: searchMode.value
+        searchMode: searchMode.value,
+        answerMode: currentAnswerMode()
       },
       {
         signal: controller.signal,
@@ -1402,7 +1823,7 @@ async function submitQuestion(presetQuestion = '') {
     router.push({ name: 'login', query: { redirect: route.fullPath } });
     return;
   }
-  if (!hasQwenConfig.value) {
+  if (!hasQwenConfig.value && !isAgentMode.value) {
     ElMessage.warning(qwenCopy.value.configHint);
     return;
   }
@@ -1418,9 +1839,21 @@ async function submitQuestion(presetQuestion = '') {
   question.value = '';
 
   try {
+    if (isAgentMode.value) {
+      await runAgentRequest(normalizedQuestion);
+      return;
+    }
+
     await runStreamRequest(normalizedQuestion);
   } catch (error) {
     if (error?.name === 'AbortError') {
+      return;
+    }
+
+    if (isAgentMode.value) {
+      clearPendingTurn();
+      question.value = normalizedQuestion;
+      ElMessage.error(error?.message || 'Request failed');
       return;
     }
 
@@ -1430,7 +1863,8 @@ async function submitQuestion(presetQuestion = '') {
         sessionId: activeSessionId.value,
         question: normalizedQuestion,
         topK: DEFAULT_TOP_K,
-        searchMode: searchMode.value
+        searchMode: searchMode.value,
+        answerMode: currentAnswerMode()
       });
       applyResponse(res.data, { clearPending: true });
       await loadSessions();
@@ -1593,10 +2027,29 @@ watch(searchMode, () => {
   persistSearchMode();
 });
 
+watch(chatMode, () => {
+  if (chatMode.value === CHAT_MODE_AGENT && !canUseAgentMode.value) {
+    chatMode.value = CHAT_MODE_RAG;
+    return;
+  }
+  persistChatMode();
+});
+
+watch(
+  () => authStore.isAdmin,
+  (isAdmin) => {
+    if (!isAdmin && chatMode.value === CHAT_MODE_AGENT) {
+      chatMode.value = CHAT_MODE_RAG;
+      persistChatMode();
+    }
+  },
+  { immediate: true }
+);
+
 watch(
   () => qwenConfig.value.webSearchEnabled,
   (enabled) => {
-    if (!enabled && searchMode.value === SEARCH_MODE_LOCAL_AND_WEB) {
+    if (!enabled && isWebSearchModeValue(searchMode.value)) {
       searchMode.value = SEARCH_MODE_LOCAL_ONLY;
     }
   }
@@ -1790,7 +2243,15 @@ onBeforeUnmount(() => {
             {{ sidebarExpanded ? 'Hide Panel' : 'Open Panel' }}
           </button>
           <div v-if="result" class="stage-badges">
-            <span class="stage-badge">{{ result.mode === 'llm' ? copy.modeLlm : copy.modeRetrieval }}</span>
+            <span class="stage-badge">{{
+              result.mode === 'agent'
+                ? copy.modeAgent || 'Agent'
+                : result.mode === 'ask'
+                  ? copy.modeAsk || 'Ask'
+                : result.mode === 'llm'
+                  ? copy.modeLlm
+                  : copy.modeRetrieval
+            }}</span>
           </div>
         </div>
       </header>
@@ -1846,7 +2307,15 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <div v-if="message.role === 'assistant' && !message.pending && !message.skeleton" class="bubble-feedback">
+              <div
+                v-if="
+                  message.role === 'assistant' &&
+                  !message.pending &&
+                  !message.skeleton &&
+                  !isAgentMessage(message)
+                "
+                class="bubble-feedback"
+              >
                 <button
                   type="button"
                   class="feedback-pill"
@@ -1887,11 +2356,74 @@ onBeforeUnmount(() => {
                   v-html="message.renderedContent"
                 ></div>
 
+                <div v-if="hasAgentTrace(message)" class="agent-trace-panel">
+                  <div class="agent-trace-head">
+                    <span class="agent-trace-title">{{ copy.agentTraceTitle || 'Execution Trace' }}</span>
+                    <span class="agent-trace-status" :class="String(message.agentTrace.task?.status || '').toLowerCase()">
+                      {{ message.agentTrace.task?.status || 'READY' }}
+                    </span>
+                  </div>
+                  <div class="agent-step-list">
+                    <article
+                      v-for="step in message.agentTrace.steps"
+                      :key="`${message.id}-agent-step-${step.id}`"
+                      class="agent-step-card"
+                    >
+                      <div class="agent-step-main">
+                        <span class="agent-step-index">{{ step.stepIndex }}</span>
+                        <div class="agent-step-copy">
+                          <strong>{{ step.agentRole || step.stepName }}</strong>
+                          <span>{{ step.stepName }}</span>
+                        </div>
+                        <span class="agent-step-status" :class="String(step.status || '').toLowerCase()">
+                          {{ step.status }}
+                        </span>
+                        <span v-if="formatAgentLatency(step.latencyMs)" class="agent-step-latency">
+                          {{ formatAgentLatency(step.latencyMs) }}
+                        </span>
+                      </div>
+                      <p v-if="step.outputSummary" class="agent-step-summary">{{ step.outputSummary }}</p>
+                      <div class="agent-tool-list">
+                        <div
+                          v-for="call in getToolCallsForStep(message, step.id)"
+                          :key="`${message.id}-agent-tool-${call.id}`"
+                          class="agent-tool-row"
+                          :class="{ failed: !call.success }"
+                        >
+                          <span class="agent-tool-dot" aria-hidden="true"></span>
+                          <strong>{{ call.toolName }}</strong>
+                          <span>{{ copy.agentTracePermission || 'Permission' }}: {{ call.permissionLevel }}</span>
+                          <span>{{ call.success ? copy.agentTraceSuccess || 'Success' : copy.agentTraceFailed || 'Failed' }}</span>
+                          <em>{{ call.errorMessage || call.responseSummary }}</em>
+                        </div>
+                        <div v-if="!getToolCallsForStep(message, step.id).length" class="agent-tool-empty">
+                          {{ copy.agentTraceNoTools || 'No tool calls' }}
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                  <article v-if="message.agentTrace.finalArticle" class="agent-final-article">
+                    <div class="agent-final-head">
+                      <span class="agent-trace-title">Final Article</span>
+                      <span class="agent-trace-status completed">READY</span>
+                    </div>
+                    <div
+                      class="agent-final-content markdown-body"
+                      v-html="message.agentTrace.renderedFinalArticle"
+                    ></div>
+                  </article>
+                </div>
+
                 <div v-if="shouldShowMessageActions(message)" class="message-actions">
                   <button type="button" class="ghost-action message-action-btn" @click="copyMessageContent(message)">
                     {{ messageActionCopy.copy }}
                   </button>
-                  <button type="button" class="ghost-action message-action-btn" @click="retryAssistantMessage(message)">
+                  <button
+                    v-if="!isAgentMessage(message)"
+                    type="button"
+                    class="ghost-action message-action-btn"
+                    @click="retryAssistantMessage(message)"
+                  >
                     {{ messageActionCopy.retry }}
                   </button>
                 </div>
@@ -2029,6 +2561,24 @@ onBeforeUnmount(() => {
             />
             <div class="composer-inline-hints">
               <div class="search-mode-group">
+                <div class="search-mode-picker" :aria-label="copy.chatModeTitle || 'Response mode'" role="group">
+                  <button
+                    v-for="option in chatModeOptions"
+                    :key="option.value"
+                    type="button"
+                    class="search-mode-option"
+                    :data-mode="option.value"
+                    :class="{ active: chatMode === option.value }"
+                    :aria-pressed="chatMode === option.value"
+                    :disabled="loading"
+                    @click="chatMode = option.value"
+                  >
+                    <span class="search-mode-option-dot" aria-hidden="true"></span>
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="!isAskMode" class="search-mode-group">
                 <div class="search-mode-picker" :aria-label="copy.searchModeTitle" role="group">
                   <button
                     v-for="option in searchModeOptions"
@@ -2038,7 +2588,7 @@ onBeforeUnmount(() => {
                     :data-mode="option.value"
                     :class="{ active: searchMode === option.value }"
                     :aria-pressed="searchMode === option.value"
-                    :disabled="loading || (option.value === SEARCH_MODE_LOCAL_AND_WEB && !canUseHybridSearch)"
+                    :disabled="loading || (isWebSearchModeValue(option.value) && !canUseHybridSearch)"
                     @click="searchMode = option.value"
                   >
                     <span class="search-mode-option-dot" aria-hidden="true"></span>
@@ -2064,7 +2614,7 @@ onBeforeUnmount(() => {
                   v-if="!qwenApiKeyEditorVisible"
                   type="primary"
                   plain
-                  class="search-mode-key-btn"
+                  class="search-mode-key-btn qwen-key-btn"
                   :loading="qwenSaving"
                   @click="showQwenApiKeyEditor"
                 >
@@ -2077,7 +2627,7 @@ onBeforeUnmount(() => {
               <el-button
                 class="send-btn composer-inline-btn"
                 type="primary"
-                :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig"
+                :disabled="!canSubmitQuestion"
                 @click="submitQuestion()"
               >
                 <span class="send-btn-content">
@@ -3013,6 +3563,192 @@ onBeforeUnmount(() => {
   opacity: 0.88;
 }
 
+.agent-trace-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--rag-radius-card);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.agent-trace-head,
+.agent-step-main,
+.agent-final-head,
+.agent-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-trace-head {
+  justify-content: space-between;
+}
+
+.agent-final-head {
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.agent-trace-title {
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agent-trace-status,
+.agent-step-status,
+.agent-step-latency {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--rag-radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.agent-trace-status.completed,
+.agent-step-status.completed {
+  color: #9ee7c0;
+  border-color: rgba(108, 220, 150, 0.22);
+  background: rgba(80, 196, 128, 0.1);
+}
+
+.agent-trace-status.failed,
+.agent-step-status.failed {
+  color: #ffb7b7;
+  border-color: rgba(255, 120, 120, 0.24);
+  background: rgba(255, 100, 100, 0.08);
+}
+
+.agent-step-list {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-step-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border-radius: var(--rag-radius-card);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.agent-final-article {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--rag-radius-card);
+  border: 1px solid rgba(142, 230, 181, 0.16);
+  background:
+    linear-gradient(180deg, rgba(80, 196, 128, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.025);
+}
+
+.agent-final-content {
+  max-height: 52vh;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.agent-step-main {
+  min-width: 0;
+}
+
+.agent-step-index {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.agent-step-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.agent-step-copy strong {
+  color: var(--text-main);
+  font-size: 0.82rem;
+}
+
+.agent-step-copy span,
+.agent-step-summary,
+.agent-tool-row,
+.agent-tool-empty {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.agent-step-summary {
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.agent-tool-list {
+  display: grid;
+  gap: 7px;
+}
+
+.agent-tool-row {
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: var(--rag-radius-card);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.agent-tool-row strong {
+  color: var(--text-main);
+  font-size: 0.78rem;
+}
+
+.agent-tool-row em {
+  min-width: min(100%, 220px);
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tool-row.failed .agent-tool-dot {
+  background: #ff8585;
+}
+
+.agent-tool-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8ee6b5;
+}
+
+.agent-tool-empty {
+  padding-left: 36px;
+}
+
 .user-bubble {
   width: fit-content;
   max-width: min(78%, 720px);
@@ -3197,6 +3933,11 @@ onBeforeUnmount(() => {
   border-color: rgba(255, 197, 92, 0.34);
 }
 
+.search-mode-option[data-mode='WEB_ONLY'].active {
+  background: linear-gradient(135deg, rgba(88, 211, 187, 0.26), rgba(72, 163, 255, 0.18));
+  border-color: rgba(88, 211, 187, 0.34);
+}
+
 .search-mode-option[data-mode='LOCAL_AND_WEB'].active {
   background: linear-gradient(135deg, rgba(72, 163, 255, 0.28), rgba(88, 211, 187, 0.22));
   border-color: rgba(96, 183, 255, 0.34);
@@ -3298,14 +4039,15 @@ onBeforeUnmount(() => {
 .qwen-inline-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   flex-wrap: wrap;
   min-width: 0;
+  flex: 0 1 auto;
 }
 
 .qwen-model-select {
-  width: 220px;
-  max-width: 100%;
+  width: clamp(140px, 12vw, 168px);
+  max-width: 168px;
 }
 
 .qwen-model-select :deep(.el-select__wrapper) {
@@ -3334,12 +4076,19 @@ onBeforeUnmount(() => {
 
 .search-mode-key-btn {
   flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 10px;
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.02);
   box-shadow: none;
 }
 
+.qwen-key-btn {
+  min-width: 0;
+}
+
 .send-btn.composer-inline-btn {
+  flex-shrink: 0;
   min-height: 32px;
   padding: 0 14px;
   border-color: rgba(220, 193, 136, 0.5);
@@ -3677,6 +4426,10 @@ html[data-theme='light'] .search-mode-option:hover:not(:disabled) {
 
 html[data-theme='light'] .search-mode-option[data-mode='LOCAL_ONLY'].active {
   background: linear-gradient(135deg, rgba(255, 190, 72, 0.26), rgba(255, 128, 72, 0.18));
+}
+
+html[data-theme='light'] .search-mode-option[data-mode='WEB_ONLY'].active {
+  background: linear-gradient(135deg, rgba(63, 200, 170, 0.18), rgba(72, 163, 255, 0.14));
 }
 
 html[data-theme='light'] .search-mode-option[data-mode='LOCAL_AND_WEB'].active {

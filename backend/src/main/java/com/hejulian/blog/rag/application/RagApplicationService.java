@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
@@ -47,7 +48,9 @@ public class RagApplicationService {
 
     private static final int MAX_PROMPT_HISTORY_MESSAGES = 8;
     private static final int MAX_RESPONSE_HISTORY_MESSAGES = 20;
+    private static final String ANSWER_MODE_ASK = "ASK";
     private static final String SEARCH_MODE_LOCAL_ONLY = "LOCAL_ONLY";
+    private static final String SEARCH_MODE_WEB_ONLY = "WEB_ONLY";
     private static final String SEARCH_MODE_LOCAL_AND_WEB = "LOCAL_AND_WEB";
     private static final String SOURCE_TYPE_BLOG = "blog";
     private static final String SOURCE_TYPE_WEB = "web";
@@ -65,6 +68,9 @@ public class RagApplicationService {
     private final CacheManager cacheManager;
 
     public RagDtos.AskResponse askQuestion(Long userId, RagDtos.AskRequest request) {
+        if (isAskMode(request.answerMode())) {
+            return askModelOnly(userId, request);
+        }
         AnswerContext context = buildAnswerContext(userId, request);
         if (context.prebuiltResponse() != null) {
             List<RagDtos.ChatMessage> history = persistConversation(
@@ -87,7 +93,7 @@ public class RagApplicationService {
             );
         }
 
-        if (SEARCH_MODE_LOCAL_AND_WEB.equals(context.searchMode()) && chatModel.supportsWebSearch()) {
+        if (isWebSearchMode(context.searchMode()) && chatModel.supportsWebSearch()) {
             WebSearchResolution resolution = resolveWithOfficialWebSearch(context);
             if (resolution != null) {
                 List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
@@ -311,7 +317,7 @@ public class RagApplicationService {
             );
         }
 
-        if (SEARCH_MODE_LOCAL_AND_WEB.equals(context.searchMode()) && chatModel.supportsWebSearch()) {
+        if (isWebSearchMode(context.searchMode()) && chatModel.supportsWebSearch()) {
             WebSearchResolution resolution = resolveWithOfficialWebSearch(context);
             if (resolution != null) {
                 List<Integer> citations = citationGuardService.extractCitationIndices(resolution.answer(), resolution.sources().size());
@@ -369,6 +375,10 @@ public class RagApplicationService {
     }
 
     private void streamQuestionInternal(Long userId, RagDtos.AskRequest request, SseEmitter emitter) {
+        if (isAskMode(request.answerMode())) {
+            streamModelOnly(userId, request, emitter);
+            return;
+        }
         AnswerContext context = buildAnswerContext(userId, request);
         if (context.prebuiltResponse() != null) {
             List<RagDtos.ChatMessage> history = persistConversation(
@@ -399,7 +409,7 @@ public class RagApplicationService {
             return;
         }
 
-        if (SEARCH_MODE_LOCAL_AND_WEB.equals(context.searchMode()) && chatModel.supportsWebSearch()) {
+        if (isWebSearchMode(context.searchMode()) && chatModel.supportsWebSearch()) {
             sendEvent(
                     emitter,
                     "meta",
@@ -501,6 +511,76 @@ public class RagApplicationService {
         return buildAnswerContext(sessionId, request.question(), request.searchMode(), request.topK(), baseHistory);
     }
 
+    private RagDtos.AskResponse askModelOnly(Long userId, RagDtos.AskRequest request) {
+        String sessionId = normalizeSessionId(request.sessionId());
+        String question = request.question().trim();
+        IndexState indexState = indexingService.ensureIndexReady();
+        List<ChatHistoryMessage> baseHistory = limitHistory(
+                knowledgeBaseRepository.loadConversationHistory(userId, sessionId),
+                MAX_RESPONSE_HISTORY_MESSAGES
+        );
+        String answer = generateModelOnlyAnswer(question, baseHistory, null);
+        List<RagDtos.ChatMessage> history = persistConversation(
+                userId,
+                sessionId,
+                question,
+                answer,
+                "ask",
+                List.of(),
+                List.of()
+        );
+        return buildModelOnlyResponse(
+                sessionId,
+                question,
+                answer,
+                normalizeSearchMode(request.searchMode()),
+                indexState,
+                history
+        );
+    }
+
+    private void streamModelOnly(Long userId, RagDtos.AskRequest request, SseEmitter emitter) {
+        String sessionId = normalizeSessionId(request.sessionId());
+        String question = request.question().trim();
+        String searchMode = normalizeSearchMode(request.searchMode());
+        IndexState indexState = indexingService.ensureIndexReady();
+        List<ChatHistoryMessage> baseHistory = limitHistory(
+                knowledgeBaseRepository.loadConversationHistory(userId, sessionId),
+                MAX_RESPONSE_HISTORY_MESSAGES
+        );
+        List<RagDtos.ChatMessage> history = toDtoHistory(baseHistory);
+        sendEvent(
+                emitter,
+                "meta",
+                null,
+                buildModelOnlyResponse(sessionId, question, "", searchMode, indexState, history),
+                null
+        );
+
+        String answer = generateModelOnlyAnswer(
+                question,
+                baseHistory,
+                delta -> sendEvent(emitter, "delta", delta, null, null)
+        );
+        List<RagDtos.ChatMessage> persistedHistory = persistConversation(
+                userId,
+                sessionId,
+                question,
+                answer,
+                "ask",
+                List.of(),
+                List.of()
+        );
+        sendEvent(
+                emitter,
+                "done",
+                null,
+                buildModelOnlyResponse(sessionId, question, answer, searchMode, indexState, persistedHistory),
+                null
+        );
+        emitter.complete();
+    }
+
     private AnswerContext buildAnswerContext(
             String sessionId,
             String rawQuestion,
@@ -513,9 +593,10 @@ public class RagApplicationService {
         List<RagDtos.ChatMessage> history = toDtoHistory(limitHistory(baseHistory, MAX_RESPONSE_HISTORY_MESSAGES));
         IndexState indexState = indexingService.ensureIndexReady();
         boolean webSearchRequested = isWebSearchRequested(requestedSearchMode);
-        String searchMode = webSearchRequested ? SEARCH_MODE_LOCAL_AND_WEB : SEARCH_MODE_LOCAL_ONLY;
+        boolean localSearchRequested = !SEARCH_MODE_WEB_ONLY.equals(requestedSearchMode);
+        String searchMode = webSearchRequested ? requestedSearchMode : SEARCH_MODE_LOCAL_ONLY;
 
-        if (indexState.chunkCount() == 0 && !webSearchRequested) {
+        if (indexState.chunkCount() == 0 && localSearchRequested && !webSearchRequested) {
             RagDtos.AskResponse response = new RagDtos.AskResponse(
                     sessionId,
                     question,
@@ -547,13 +628,13 @@ public class RagApplicationService {
         }
 
         int topK = normalizeTopK(requestedTopK);
-        List<ScoredChunk> recalled = indexState.chunkCount() > 0 ? recallChunks(question, topK) : List.of();
+        List<ScoredChunk> recalled = localSearchRequested && indexState.chunkCount() > 0 ? recallChunks(question, topK) : List.of();
         List<ScoredChunk> rankedChunks = recalled.isEmpty()
                 ? List.of()
                 : retrievalService.rerank(question, recalled, topK, rerankModel);
 
         List<RagEvidence> evidences = new ArrayList<>(buildBlogEvidence(rankedChunks));
-        if (evidences.isEmpty() && !webSearchRequested) {
+        if (evidences.isEmpty() && localSearchRequested && !webSearchRequested) {
             RagDtos.AskResponse response = new RagDtos.AskResponse(
                     sessionId,
                     question,
@@ -990,11 +1071,82 @@ public class RagApplicationService {
         );
     }
 
+    private RagDtos.AskResponse buildModelOnlyResponse(
+            String sessionId,
+            String question,
+            String answer,
+            String searchMode,
+            IndexState indexState,
+            List<RagDtos.ChatMessage> history
+    ) {
+        return new RagDtos.AskResponse(
+                sessionId,
+                question,
+                answer,
+                "ask",
+                chatModel.isChatConfigured(),
+                indexState.postCount(),
+                indexState.chunkCount(),
+                List.of(),
+                List.of(),
+                history,
+                false,
+                searchMode
+        );
+    }
+
+    private String generateModelOnlyAnswer(
+            String question,
+            List<ChatHistoryMessage> history,
+            @Nullable Consumer<String> deltaConsumer
+    ) {
+        if (!chatModel.isChatConfigured()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chat model is not configured");
+        }
+        String systemPrompt = """
+                You are a helpful conversational assistant.
+                Answer the user directly without using retrieval, citations, hidden tool traces, or blog-source assumptions.
+                Use the same language as the user unless they ask otherwise.
+                """;
+        String userPrompt = buildModelOnlyUserPrompt(question, history);
+        String answer = deltaConsumer != null
+                ? chatModel.streamGenerate(systemPrompt, userPrompt, 0.3D, deltaConsumer)
+                : chatModel.generate(systemPrompt, userPrompt, 0.3D);
+        if (!StringUtils.hasText(answer)) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Chat model returned an empty answer");
+        }
+        return answer.trim();
+    }
+
+    private String buildModelOnlyUserPrompt(String question, List<ChatHistoryMessage> history) {
+        List<ChatHistoryMessage> promptHistory = limitHistory(history, MAX_PROMPT_HISTORY_MESSAGES);
+        String historyText = promptHistory.isEmpty()
+                ? "No previous conversation."
+                : promptHistory.stream()
+                .map(message -> "%s: %s".formatted(message.role(), message.content()))
+                .toList()
+                .toString();
+        return """
+                Recent conversation:
+                %s
+
+                User question:
+                %s
+                """.formatted(historyText, question);
+    }
+
     private String normalizeSearchMode(String searchMode) {
+        if (SEARCH_MODE_WEB_ONLY.equalsIgnoreCase(searchMode)) {
+            return SEARCH_MODE_WEB_ONLY;
+        }
         if (SEARCH_MODE_LOCAL_AND_WEB.equalsIgnoreCase(searchMode)) {
             return SEARCH_MODE_LOCAL_AND_WEB;
         }
         return SEARCH_MODE_LOCAL_ONLY;
+    }
+
+    private boolean isAskMode(String answerMode) {
+        return ANSWER_MODE_ASK.equalsIgnoreCase(answerMode);
     }
 
     private boolean shouldAcceptGeneratedAnswer(AnswerContext context, @Nullable String generated) {
@@ -1010,7 +1162,11 @@ public class RagApplicationService {
     }
 
     private boolean isWebSearchRequested(String searchMode) {
-        return SEARCH_MODE_LOCAL_AND_WEB.equals(searchMode) && chatModel.supportsWebSearch();
+        return isWebSearchMode(searchMode) && chatModel.supportsWebSearch();
+    }
+
+    private boolean isWebSearchMode(String searchMode) {
+        return SEARCH_MODE_LOCAL_AND_WEB.equals(searchMode) || SEARCH_MODE_WEB_ONLY.equals(searchMode);
     }
 
     @Nullable

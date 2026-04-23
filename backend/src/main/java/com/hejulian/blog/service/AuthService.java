@@ -148,6 +148,18 @@ public class AuthService {
 
     public RagRuntimeContextHolder.RagRuntimeOptions requireRagRuntimeOptions(AuthenticatedUser authenticatedUser) {
         UserAccount user = requireCurrentUser(authenticatedUser);
+        return requireRagRuntimeOptions(user);
+    }
+
+    public RagRuntimeContextHolder.RagRuntimeOptions requireRagRuntimeOptions(Long userId) {
+        UserAccount user = userAccountMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("\u8d26\u53f7\u4e0d\u5b58\u5728");
+        }
+        return requireRagRuntimeOptions(user);
+    }
+
+    private RagRuntimeContextHolder.RagRuntimeOptions requireRagRuntimeOptions(UserAccount user) {
         if (!StringUtils.hasText(user.getQwenApiKey()) || !StringUtils.hasText(user.getQwenChatModel())) {
             throw new BusinessException("\u53d1\u8d77\u5bf9\u8bdd\u524d\u8bf7\u5148\u914d\u7f6e\u5343\u95ee API Key");
         }

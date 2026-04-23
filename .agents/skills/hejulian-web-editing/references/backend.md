@@ -1,143 +1,74 @@
 # Backend Reference
 
-Read this file only for backend-facing tasks.
+Use for controllers, services, auth, uploads, public/admin APIs, MyBatis persistence, schema, cache, and runtime config.
 
-## Backend stack
+## Stack
 
 - Spring Boot 3
-- MyBatis
-- Spring Security
-- JWT auth
+- Java 21 container build
+- MyBatis XML mappers
+- Spring Security + JWT
 - Redis-backed Spring Cache
-- MySQL persistence
+- MySQL
 
-## Backend structure
+## Package map
 
-### Common and config
+Base package: `backend/src/main/java/com/hejulian/blog/`
 
-- common responses and helpers: `backend/src/main/java/com/hejulian/blog/common/`
-- config: `backend/src/main/java/com/hejulian/blog/config/`
-- global exception handling: `backend/src/main/java/com/hejulian/blog/exception/`
-- security: `backend/src/main/java/com/hejulian/blog/security/`
+- `common/`: API response, page response, cache names.
+- `config/`: Spring Security, CORS, Redis, web/static mappings.
+- `controller/`: public/auth/RAG controllers.
+- `controller/admin/`: admin dashboard, posts, taxonomy, comments, feedback, uploads.
+- `dto/`: REST DTOs such as `AuthDtos`, `RagDtos`, `AdminDtos`.
+- `entity/`: persistence entities.
+- `mapper/`: MyBatis mapper interfaces.
+- `service/`: blog, auth, uploads, schema/data initialization, optional Python bridge.
+- `rag/`: RAG/Ask application, domain, model gateway, vector persistence.
+- `agent/`: Agent tasks, orchestration, tools, trace, memory, ops.
 
-### Controllers
+## Important controllers
 
-- public/auth controllers: `backend/src/main/java/com/hejulian/blog/controller/`
-- admin controllers: `backend/src/main/java/com/hejulian/blog/controller/admin/`
-
-### Services
-
-- service layer: `backend/src/main/java/com/hejulian/blog/service/`
-- main services include `PublicBlogService.java`, `AuthService.java`, `AdminBlogService.java`, `UploadStorageService.java`
-
-### Persistence
-
-- entities: `backend/src/main/java/com/hejulian/blog/entity/`
-- mapper interfaces: `backend/src/main/java/com/hejulian/blog/mapper/`
-- MyBatis XML: `backend/src/main/resources/mapper/`
-- base SQL bootstrap: `sql/blog_mysql_init.sql`
-
-### Schema compatibility helpers
-
-- user compatibility: `backend/src/main/java/com/hejulian/blog/service/UserSchemaInitializer.java`
-- bootstrap/demo data: `backend/src/main/java/com/hejulian/blog/service/DataInitializer.java`
-
-## Controller map
-
-### Public and auth
-
-- `PublicBlogController.java`: homepage, public post list, post detail, comment submission path
-- `AuthController.java`: login, register, current profile, Qwen config
-- `RagController.java`: RAG APIs and SSE stream
-
-### Admin
-
-- `AdminDashboardController.java`: admin overview stats
-- `AdminPostController.java`: post CRUD and editor-facing operations
-- `AdminTaxonomyController.java`: category and tag CRUD
-- `AdminCommentController.java`: comment moderation
-- `AdminRagFeedbackController.java`: feedback management and export
-- `AdminUploadController.java`: image uploads used by the editor
+- `PublicBlogController.java`: homepage, post list/detail, comments, public RAG search.
+- `AuthController.java`: login/register/profile/Qwen config.
+- `RagController.java`: `/api/public/rag/**`, Ask/RAG normal and SSE chat.
+- `AgentTaskController.java`: `/api/agent/tasks/**`, admin-only task and SSE endpoint.
+- Agent/admin controllers under `backend/src/main/java/com/hejulian/blog/agent/controller/`.
 
 ## Service responsibilities
 
-- `PublicBlogService.java`: public homepage aggregation, public article data, public-facing browsing logic
-- `AuthService.java`: auth, profile resolution, Qwen config persistence, runtime option resolution
-- `AdminBlogService.java`: admin CRUD for posts and taxonomies, dashboard-adjacent content operations
-- `UploadStorageService.java`: uploaded file persistence and path generation
-- `PythonBridgeClient.java`: optional local bridge integration for model workflows
+- `AuthService.java`: account/profile/Qwen runtime options.
+- `AdminBlogService.java`: post CRUD and publishing path used by Agent publisher.
+- `PublicBlogService.java`: public site aggregation/detail/search.
+- `RagApplicationService.java`: RAG, Ask, SSE, history, replay, feedback.
+- `AgentOrchestratorService.java`: Agent planner/researcher/writer/reviewer/publisher workflow.
+- `AgentTaskApplicationService.java`: Agent task creation, detail, list, cancel, retry, SSE snapshots.
 
-## Security and auth
+## Persistence checklist
 
-- security config: `backend/src/main/java/com/hejulian/blog/config/SecurityConfig.java`
-- JWT provider and filter: `backend/src/main/java/com/hejulian/blog/security/`
-- authenticated principal model: `AuthenticatedUser.java`
+When changing stored data, inspect all relevant layers:
 
-Important assumptions:
-
-- comments and RAG require authenticated users
-- admin routes require admin authority
-- frontend route guards and backend security must stay aligned
-
-## Persistence and schema guidance
-
-If a change affects stored data, inspect:
-
-- entity
+- entity class
 - mapper interface
-- mapper XML
-- service or controller caller
-- `sql/blog_mysql_init.sql`
-- `UserSchemaInitializer.java` when user-table compatibility matters
+- mapper XML under `backend/src/main/resources/mapper/`
+- SQL bootstrap: `sql/blog_mysql_init.sql`
+- schema initializer: `UserSchemaInitializer.java`, `RagSchemaInitializer.java`, or Agent schema initializer if present
+- service cache invalidation
 
-Do not patch only one layer if the data shape crosses controller, service, mapper, and SQL boundaries.
+## Security expectations
 
-## Runtime config
+- `/api/agent/**` requires admin role.
+- `/api/public/rag/**` requires authenticated users except public search endpoints as configured in `SecurityConfig.java`.
+- Comments and uploads remain protected by auth/admin rules.
 
-Main runtime config lives in:
+## Cache-sensitive areas
 
-- `backend/src/main/resources/application.yml`
-
-This file contains:
-
-- datasource config
-- Redis config
-- app info
-- RAG settings
-- JWT settings
-
-If the task touches runtime behavior, env-based defaults, or model settings, read `application.yml` early.
-
-## Caching
-
-Main cache names live in:
-
-- `backend/src/main/java/com/hejulian/blog/common/CacheNames.java`
-
-Redis cache wiring lives in:
-
-- `backend/src/main/java/com/hejulian/blog/config/RedisConfig.java`
-
-Watch for cache invalidation when changing:
-
-- public site aggregation
-- Qwen config
-- RAG history
-- RAG sessions
-- feedback or replay flows
-
-## Uploads and static exposure
-
-- upload handling: `AdminUploadController.java`, `UploadStorageService.java`
-- static exposure for uploads: `backend/src/main/java/com/hejulian/blog/config/WebConfig.java`
-
-If the task touches publicly accessible files, also read `references/deployment.md`.
+- Cache names: `backend/src/main/java/com/hejulian/blog/common/CacheNames.java`
+- Redis wiring: `backend/src/main/java/com/hejulian/blog/config/RedisConfig.java`
+- Public post writes should evict homepage/post-list caches.
+- RAG/Ask/Agent history writes should evict RAG session/history caches.
+- Qwen config GET should remain read-mostly; capability refresh belongs in save/update.
 
 ## Validation
 
-Preferred validation:
-
-- targeted backend tests when available
-- Maven build or package commands when available
-
-If the task touches chat or retrieval behavior, also read `references/rag.md`.
+If local Maven exists, use Maven package with tests skipped when appropriate.
+If local Maven is unavailable, use `docker compose build backend` from repo root.

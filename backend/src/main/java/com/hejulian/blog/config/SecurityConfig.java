@@ -38,6 +38,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/public/site", "/api/public/posts", "/api/public/posts/**", "/api/public/rag/search").permitAll()
                         .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers("/api/agent/**").hasRole("ADMIN")
                         .requestMatchers("/api/auth/**", "/api/public/comments", "/api/public/rag/**").authenticated()
                         .requestMatchers("/uploads/**", "/actuator/health", "/actuator/info").permitAll()
                         .anyRequest().authenticated()

@@ -1,63 +1,57 @@
 # Review Reference
 
-Read this file only for review tasks in `hejulian-web`.
+Use for code review or final pass on changes in `hejulian-web`.
 
 ## Review strategy
 
-Do not load the whole repo by default.
-Read only the files touched by the diff, then pull in the matching references:
+1. Identify changed files or affected feature area.
+2. Read only those files plus the matching reference.
+3. Trace contracts across frontend, backend, persistence, cache, and deployment when the change crosses layers.
+4. Report findings first, ordered by severity, with file/line references.
 
-- frontend changes: read `references/frontend.md`
-- backend changes: read `references/backend.md`
-- RAG or `/knowledge` changes: read `references/rag.md`
-- Docker, nginx, static delivery, or `/resume` changes: read `references/deployment.md` and possibly `references/resume.md`
-
-## Priority review themes
+## Priority findings by area
 
 ### Frontend
 
-- route guard regressions
-- public/admin layout regressions
-- locale regressions
-- data contract mismatch with backend
+- Route guard regressions.
+- Admin-only UI exposed to normal users.
+- Locale/copy regressions or corrupted UTF-8 strings.
+- API payload mismatch with backend DTOs.
+- `/knowledge` state regressions across RAG, Ask, and Agent modes.
+- Source/citation rendering or history restore breakage.
 
 ### Backend
 
-- controller/service/mapper mismatch
-- schema changes applied in only one place
-- auth regressions
-- upload path or static exposure regressions
+- Controller/service/DTO/mapper mismatch.
+- MyBatis XML column/value count mismatch.
+- Schema changes missing from SQL bootstrap or initializer.
+- Auth/security regressions.
+- Cache invalidation omissions after writes.
+- Runtime config not applied through `RagRuntimeContextHolder`.
 
-### RAG
+### RAG/Ask
 
-- source ownership regressions
-- citation jump regressions
-- history restore regressions
-- SSE payload mismatch
-- cache invalidation omissions
+- Ask accidentally using retrieval or requiring citations.
+- RAG losing source ownership or citation mappings.
+- SSE payload mismatch between backend `StreamEvent` and frontend parser.
+- Replay/feedback/history writes not preserving sources/variants.
 
-### Deployment and resume
+### Agent
 
-- nginx route regressions
-- Docker mount regressions
-- static resume delivery regressions
-- frontend SPA and static route conflicts
+- Task creation/retry running synchronously and hiding progress.
+- Cancellation not honored before publish/final status.
+- Tool calls not recorded or not visible in trace.
+- Final article containing plan/debug/tool text.
+- Admin-only backend route not enforced.
+- Published post caches not evicted.
 
-## Review checklist
+### Deployment
 
-Check what applies:
+- Nginx stream endpoints buffered.
+- Template/config mismatch for frontend nginx.
+- Docker compose env/mount mismatch.
+- `/resume` static route broken by Vue SPA routing.
 
-- backend payload still matches frontend consumption
-- `/knowledge` still preserves source and citation behavior
-- history restore still returns enough source data
-- auth and admin checks still align across frontend and backend
-- static `/resume` delivery still uses nginx and mounted files correctly
+## Residual risk notes
 
-## Reporting
-
-When reviewing:
-
-- lead with findings
-- prioritize bugs, regressions, and missing tests
-- keep summaries brief
-- include file references when possible
+When no findings are found, mention any unvalidated risk such as no runtime smoke test, no Docker rebuild, or no live SSE check.

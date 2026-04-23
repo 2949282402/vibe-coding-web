@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.agent.mapper.AgentToolCallMapper">
+
+    <resultMap id="AgentToolCallResultMap" type="com.hejulian.blog.agent.entity.AgentToolCall">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="stepId" column="step_id"/>
+        <result property="toolName" column="tool_name"/>
+        <result property="permissionLevel" column="permission_level"/>
+        <result property="requestJson" column="request_json"/>
+        <result property="responseSummary" column="response_summary"/>
+        <result property="success" column="success"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="latencyMs" column="latency_ms"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectByTaskId" resultMap="AgentToolCallResultMap">
+        SELECT id, task_id, step_id, tool_name, permission_level, request_json, response_summary, success, error_message, latency_ms, created_at
+        FROM agent_tool_call
+        WHERE task_id = #{taskId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="selectByTaskIdPaged" resultMap="AgentToolCallResultMap">
+        SELECT id, task_id, step_id, tool_name, permission_level, request_json, response_summary, success, error_message, latency_ms, created_at
+        FROM agent_tool_call
+        WHERE task_id = #{taskId}
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectAllPaged" resultMap="AgentToolCallResultMap">
+        SELECT id, task_id, step_id, tool_name, permission_level, request_json, response_summary, success, error_message, latency_ms, created_at
+        FROM agent_tool_call
+        ORDER BY id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectByTaskIdForAdmin" resultMap="AgentToolCallResultMap">
+        SELECT id, task_id, step_id, tool_name, permission_level, request_json, response_summary, success, error_message, latency_ms, created_at
+        FROM agent_tool_call
+        WHERE task_id = #{taskId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="countByTaskId" resultType="long">
+        SELECT COUNT(1)
+        FROM agent_tool_call
+        WHERE task_id = #{taskId}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1)
+        FROM agent_tool_call
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.agent.entity.AgentToolCall" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_tool_call (
+            task_id, step_id, tool_name, permission_level, request_json, response_summary, success, error_message, latency_ms, created_at
+        )
+        VALUES (
+            #{taskId}, #{stepId}, #{toolName}, #{permissionLevel}, #{requestJson}, #{responseSummary}, #{success}, #{errorMessage}, #{latencyMs}, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE agent_tool_call
+        SET success = #{success},
+            response_summary = #{responseSummary},
+            error_message = #{errorMessage}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

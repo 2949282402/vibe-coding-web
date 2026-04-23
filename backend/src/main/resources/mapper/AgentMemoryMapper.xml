@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hejulian.blog.agent.mapper.AgentMemoryMapper">
+
+    <resultMap id="AgentMemoryResultMap" type="com.hejulian.blog.agent.entity.AgentMemory">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="memoryScope" column="memory_scope"/>
+        <result property="topicKey" column="topic_key"/>
+        <result property="memoryType" column="memory_type"/>
+        <result property="content" column="content"/>
+        <result property="contentSummary" column="content_summary"/>
+        <result property="confidenceScore" column="confidence_score"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="sourceRefId" column="source_ref_id"/>
+        <result property="pinned" column="is_pinned"/>
+        <result property="deleted" column="is_deleted"/>
+        <result property="lastHitAt" column="last_hit_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectByUserId" resultMap="AgentMemoryResultMap">
+        SELECT id, user_id, memory_scope, topic_key, memory_type, content, content_summary, confidence_score, source_type, source_ref_id,
+               is_pinned, is_deleted, last_hit_at, created_at, updated_at
+        FROM agent_memory
+        WHERE user_id = #{userId}
+          AND (is_deleted = 0 OR is_deleted IS NULL)
+        <if test="memoryScope != null and memoryScope != ''">
+            AND memory_scope = #{memoryScope}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                LOWER(COALESCE(topic_key, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(COALESCE(content, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            )
+        </if>
+        <if test="onlyPinned != null and onlyPinned">
+            AND is_pinned = 1
+        </if>
+        ORDER BY is_pinned DESC, created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="selectById" resultMap="AgentMemoryResultMap">
+        SELECT id, user_id, memory_scope, topic_key, memory_type, content, content_summary, confidence_score, source_type, source_ref_id,
+               is_pinned, is_deleted, last_hit_at, created_at, updated_at
+        FROM agent_memory
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByIdAndUserId" resultMap="AgentMemoryResultMap">
+        SELECT id, user_id, memory_scope, topic_key, memory_type, content, content_summary, confidence_score, source_type, source_ref_id,
+               is_pinned, is_deleted, last_hit_at, created_at, updated_at
+        FROM agent_memory
+        WHERE id = #{id}
+          AND user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <select id="countByUserId" resultType="long">
+        SELECT COUNT(1)
+        FROM agent_memory
+        WHERE user_id = #{userId}
+          AND (is_deleted = 0 OR is_deleted IS NULL)
+        <if test="memoryScope != null and memoryScope != ''">
+            AND memory_scope = #{memoryScope}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                LOWER(COALESCE(topic_key, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(COALESCE(content, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            )
+        </if>
+        <if test="onlyPinned != null and onlyPinned">
+            AND is_pinned = 1
+        </if>
+    </select>
+
+    <insert id="insert" parameterType="com.hejulian.blog.agent.entity.AgentMemory" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_memory (
+            user_id, memory_scope, topic_key, memory_type, content, content_summary, confidence_score, source_type,
+            source_ref_id, is_pinned, is_deleted, last_hit_at, created_at, updated_at
+        )
+        VALUES (
+            #{userId}, #{memoryScope}, #{topicKey}, #{memoryType}, #{content}, #{contentSummary}, #{confidenceScore}, #{sourceType},
+            #{sourceRefId}, #{pinned}, #{deleted}, #{lastHitAt}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <update id="updatePinned">
+        UPDATE agent_memory
+        SET is_pinned = #{pinned},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND user_id = #{userId}
+    </update>
+
+    <update id="markDeleted">
+        UPDATE agent_memory
+        SET is_deleted = 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND user_id = #{userId}
+    </update>
+
+    <update id="revokeDelete">
+        UPDATE agent_memory
+        SET is_deleted = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND user_id = #{userId}
+    </update>
+
+    <update id="touchHit">
+        UPDATE agent_memory
+        SET last_hit_at = #{lastHitAt},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <insert id="upsertByTask">
+        INSERT INTO agent_memory (
+            user_id, memory_scope, topic_key, memory_type, content, content_summary, confidence_score,
+            source_type, source_ref_id, is_pinned, is_deleted, last_hit_at, created_at, updated_at
+        )
+        VALUES (
+            #{userId}, 'TASK', CONCAT('task_', #{taskId}), 'NOTE', #{content}, #{summary}, 0.72, 'task',
+            #{taskId}, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+</mapper>

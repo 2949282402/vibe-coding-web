@@ -1,158 +1,94 @@
-# RAG Reference
+# RAG, Ask, and `/knowledge` Reference
 
-Read this file only for `/knowledge` or backend RAG tasks.
+Use for `/knowledge`, RAG retrieval, pure LLM Ask mode, sources/citations, chat history, replay, feedback, search modes, and SSE.
 
-## Scope
+## User-facing modes
 
-Use this reference for:
+`frontend/src/views/KnowledgeView.vue` exposes three response modes:
 
-- `/knowledge` UI behavior
-- SSE chat streaming
-- retrieval logic
-- sources and citations
-- history restore
-- replay, feedback, rename, delete, restore, purge
-- search mode behavior
+- `RAG`: retrieval-enhanced answer. Uses sources, citations, search scopes, history, feedback, replay.
+- `Ask`: pure LLM chat. Sends `answerMode: ASK`; backend skips local/web retrieval and returns `mode: ask` with no sources/citations.
+- `Agent`: admin-only workflow. Uses `/api/agent/**`; see `references/agent.md`.
 
-## Core chain
+## Search scopes
 
-Always trace the full chain before editing:
+Search scope is separate from response mode and applies to RAG/Agent, not Ask UI:
 
-### Frontend
+- `LOCAL_ONLY`: site/RAG local retrieval only.
+- `WEB_ONLY`: Qwen web search only.
+- `LOCAL_AND_WEB`: local retrieval plus Qwen web search.
 
-- `frontend/src/views/KnowledgeView.vue`
-- `frontend/src/api/blog.js`
-- `frontend/src/utils/markdown.js`
+## Frontend chain
 
-### Backend entry
+- Page: `frontend/src/views/KnowledgeView.vue`
+- API wrapper: `frontend/src/api/blog.js`
+- Markdown/citation renderer: `frontend/src/utils/markdown.js`
 
-- `backend/src/main/java/com/hejulian/blog/controller/RagController.java`
-- `backend/src/main/java/com/hejulian/blog/rag/application/RagApplicationService.java`
+Important frontend behavior:
 
-### Backend supporting modules
+- SSE parser uses `fetch` + `ReadableStream`, not `EventSource`, so Authorization headers can be sent.
+- RAG/Ask stream endpoint: `/api/public/rag/ask/stream`.
+- Agent stream endpoint: `/api/agent/tasks/{taskId}/stream`.
+- The source rail is meaningful for RAG results; Ask results should have no sources.
+- Keep session list/history cache updates aligned with backend writes.
 
-- runtime holder: `backend/src/main/java/com/hejulian/blog/rag/application/RagRuntimeContextHolder.java`
-- indexing flow: `backend/src/main/java/com/hejulian/blog/rag/application/RagIndexingApplicationService.java`
-- config: `backend/src/main/java/com/hejulian/blog/rag/config/RagProperties.java`
-- retrieval: `backend/src/main/java/com/hejulian/blog/rag/domain/service/KnowledgeRetrievalService.java`
-- text processing: `KnowledgeTextProcessor.java`
-- prompt construction: `RagPromptService.java`
-- citation handling: `CitationGuardService.java`
-- model gateway: `backend/src/main/java/com/hejulian/blog/rag/infrastructure/client/DashScopeModelGateway.java`
-- repository: `backend/src/main/java/com/hejulian/blog/rag/infrastructure/persistence/MybatisRagKnowledgeBaseRepository.java`
-- schema initializer: `backend/src/main/java/com/hejulian/blog/rag/infrastructure/persistence/RagSchemaInitializer.java`
-- vector store: `backend/src/main/java/com/hejulian/blog/rag/infrastructure/vector/QdrantVectorStore.java`
-- optional bridge: `backend/src/main/java/com/hejulian/blog/service/PythonBridgeClient.java`
+## Backend chain
 
-### Persistence
+- Controller: `backend/src/main/java/com/hejulian/blog/controller/RagController.java`
+- DTO: `backend/src/main/java/com/hejulian/blog/dto/RagDtos.java`
+- Service: `backend/src/main/java/com/hejulian/blog/rag/application/RagApplicationService.java`
+- Runtime holder: `RagRuntimeContextHolder.java`
+- Qwen gateway: `DashScopeModelGateway.java`
+- Prompt/citation helpers: `RagPromptService.java`, `CitationGuardService.java`
+- Retrieval: `KnowledgeRetrievalService.java`, `MybatisRagKnowledgeBaseRepository.java`, `QdrantVectorStore.java`
+- Persistence mappers: `RagChatSessionMapper`, `RagChatMessageMapper`, `RagChunkMapper` and their XML files.
 
-- mapper interfaces: `backend/src/main/java/com/hejulian/blog/mapper/RagChunkMapper.java`, `RagChatSessionMapper.java`, `RagChatMessageMapper.java`
-- mapper XML: `backend/src/main/resources/mapper/RagChatSessionMapper.xml`, `RagChatMessageMapper.xml`, `RagChunkMapper.xml`
+## DTO contracts to preserve
 
-## Frontend knowledge structure
+- `RagDtos.AskRequest`: `question`, `topK`, `sessionId`, `searchMode`, `answerMode`.
+- `answerMode: ASK` means pure model chat.
+- `RagDtos.AskResponse`: contains `sessionId`, `question`, `answer`, `mode`, `sources`, `history`, `strictCitation`, `searchMode`.
+- Chat message `mode` can include `retrieval`, `llm`, `ask`, or `agent`.
 
-`frontend/src/views/KnowledgeView.vue` is the main integration point.
-It contains multiple tightly coupled areas:
+## SSE contract
 
-- left session rail
-- middle conversation timeline
-- right source rail
-- composer
-- search mode selection
-- citation jump behavior
-- history restore logic
-- feedback actions
-- source grouping and expansion behavior
+Backend sends `StreamEvent` with:
 
-Avoid broad rewrites.
-Patch only the relevant block.
+- `type: meta`: initial state and empty answer.
+- `type: delta`: streamed text chunk.
+- `type: done`: final `AskResponse`.
+- `type: error`: failure message.
 
-## Frontend API behavior
+If streaming appears delayed, check all three layers:
 
-`frontend/src/api/blog.js` includes:
+- Backend `SseEmitter` sends events promptly.
+- Frontend parser handles event framing and updates `pendingTurn`/`result`.
+- Nginx has `proxy_buffering off` and `X-Accel-Buffering no` for stream endpoints.
 
-- normal HTTP RAG APIs
-- public retrieval-only search API
-- SSE `fetch` handling for `/api/public/rag/ask/stream`
+## History, replay, feedback
 
-If the backend response shape changes, verify this parser and the `KnowledgeView.vue` consumer still match.
+Relevant endpoints:
 
-## Current product assumptions
+- `POST /api/public/rag/ask`
+- `POST /api/public/rag/ask/stream`
+- `POST /api/public/rag/replay`
+- `GET /api/public/rag/history`
+- `GET /api/public/rag/sessions`
+- rename/delete/restore/purge session endpoints
+- `POST /api/public/rag/feedback`
 
-These behaviors should be preserved unless the user explicitly asks to change them:
+When editing these flows, check cache invalidation for RAG history and session list.
 
-- chat input stays fixed near the bottom
-- left rail, center timeline, and right rail scroll independently
-- latest answer uses the right source rail as the main source display
-- older assistant messages may show compact inline source chips
-- citation clicks still activate the correct source owner and jump to the correct source
-- restored history includes enough `sources` data for old citations to keep working
-- search mode options are only `LOCAL_ONLY` and `LOCAL_AND_WEB`
-- web search uses the Qwen compatible path with `enable_search=true`
+## Common pitfalls
 
-## Session and feedback lifecycle
-
-Relevant endpoints and flows include:
-
-- ask
-- ask stream
-- replay
-- session list
-- history
-- rename
-- delete
-- restore
-- purge
-- feedback
-
-If the task touches any of these, trace from:
-
-- controller
-- application service
-- mapper interface
-- mapper XML
-- cache invalidation
-
-## Search behavior
-
-Expected modes:
-
-- `LOCAL_ONLY`: retrieval only
-- `LOCAL_AND_WEB`: retrieval plus Qwen-compatible web search
-
-Do not accidentally reintroduce removed DuckDuckGo or legacy web-search paths.
-
-## Qwen configuration and runtime options
-
-These areas are closely related:
-
-- `backend/src/main/java/com/hejulian/blog/service/AuthService.java`
-- `backend/src/main/java/com/hejulian/blog/rag/infrastructure/client/DashScopeModelGateway.java`
-- `backend/src/main/java/com/hejulian/blog/rag/application/RagRuntimeContextHolder.java`
-
-Current expectations:
-
-- `GET /api/auth/qwen-config` should be read-mostly
-- refresh should not re-probe all remote model capabilities
-- `POST /api/auth/qwen-config` is the right place to refresh capability detection
-
-## Cache-sensitive areas
-
-Inspect:
-
-- `backend/src/main/java/com/hejulian/blog/common/CacheNames.java`
-- `backend/src/main/java/com/hejulian/blog/config/RedisConfig.java`
-
-Writes involving history or sessions should evict related caches.
+- Treating Ask as RAG with zero sources. Ask should bypass retrieval intentionally.
+- Requiring citation validation for Ask output. Ask should return `strictCitation=false`.
+- Hiding the chat-mode switch in Ask mode; only hide the search-scope switch.
+- Adding web search through non-Qwen/legacy paths.
+- Changing response shapes without updating `KnowledgeView.vue` and `frontend/src/api/blog.js`.
 
 ## Validation
 
-After RAG changes, verify what applies:
-
-- streaming contract still matches frontend parsing
-- history restore still reconstructs citations and sources
-- source ownership and citation jumps still work
-- session lifecycle operations still invalidate the right caches
-
-If the task also changes UI layout, read `references/frontend.md`.
-If the task also changes service wiring or persistence, read `references/backend.md`.
+- Frontend: `npm run build`.
+- Backend: Maven package or `docker compose build backend`.
+- For SSE buffering changes, rebuild/recreate frontend container because nginx template is baked into the image.

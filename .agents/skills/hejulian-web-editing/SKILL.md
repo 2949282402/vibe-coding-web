@@ -1,181 +1,86 @@
 ---
 name: hejulian-web-editing
-description: Use this skill only when modifying, debugging, reviewing, or extending the hejulian-web repository at E:\coding\hejulian-web. It routes tasks to the right repo-specific references for the Vue frontend, Spring Boot backend, RAG chat, Docker/nginx deployment, and the static online resume.
+description: Use when modifying, debugging, reviewing, or extending the hejulian-web repository at E:\coding\hejulian-web, including its Vue frontend, Spring Boot backend, RAG/Ask/Agent knowledge page, Agent orchestration, admin console, MyBatis schema, Docker/nginx deployment, logs, and static resume delivery.
 ---
 
 # Hejulian Web Editing
 
-Use this skill only for the `hejulian-web` repository at `E:\coding\hejulian-web`.
-If the task is for another repo, do not use this skill.
+Use this skill only for `E:\coding\hejulian-web`.
+Treat it as a project map and routing guide, not a full code dump.
 
-## Purpose
+## Core workflow
 
-This skill is a repo router, not a full dump of the whole codebase.
-
-Use it to:
-
-- identify which part of this repo a task belongs to
-- load only the relevant repo context for that task
-- preserve known product assumptions around `/knowledge`, auth, caching, deployment, and `/resume`
-
-## How to use this skill
-
-Follow this order:
-
-1. Confirm the task category.
-2. Read `Project snapshot`.
-3. Read only the matching file in `references/`.
-4. Read extra reference files only if the task crosses boundaries.
-
-Do not load every reference by default.
-
-## When this skill should trigger
-
-Use it for requests such as:
-
-- modify the public blog frontend or backend in this repo
-- adjust the `/knowledge` RAG page or its backend contract
-- add or fix admin, article, taxonomy, comment, upload, auth, or feedback features
-- change RAG history, sources, search mode, session lifecycle, or retrieval behavior
-- edit Docker, nginx, static asset delivery, or `/resume`
-- review code changes in this repo with repo-specific context
+1. Classify the task by area: frontend, backend, RAG/Ask, Agent, deployment, resume, or review.
+2. Read only the matching reference file under `references/`.
+3. For cross-cutting work, load the second reference explicitly named below.
+4. Before editing, trace the smallest complete chain from UI/API to service, persistence, cache, and deployment when applicable.
+5. Keep changes targeted and preserve unrelated user edits.
 
 ## Project snapshot
 
-- Monorepo-style app with `frontend/`, `backend/`, optional `llm-bridge/`, and root `docker-compose.yml`
-- Frontend: Vue 3 + Vite + Vue Router + Pinia + Element Plus
-- Backend: Spring Boot 3 + MyBatis + Spring Security + JWT + Redis cache
-- Main product areas: public blog, admin console, login/profile, uploads, authenticated RAG chat, and static online resume
-- RAG lives inside the backend, not in a separate service
-- Redis is used for Spring Cache, including public content caches, RAG history or session caches, and cached Qwen capability results
-- User login is required for comments and RAG chat; public browsing remains open
-- Qwen API key, selected model, and related capability state are stored per user
-- Current web search path uses Qwen compatible chat completions with `enable_search=true`
-- Static online resume is served from `frontend/public/resume/index.html` through nginx and Docker bind mounts, not Vue Router
+- Root: `frontend/`, `backend/`, `llm-bridge/`, `sql/`, `deploy/`, `logs/`, `docs/`, `.agents/`, `docker-compose.yml`.
+- Frontend: Vue 3 + Vite + Vue Router + Pinia + Element Plus.
+- Backend: Spring Boot 3 + MyBatis + Spring Security JWT + Redis cache + MySQL.
+- RAG/Ask/Agent live in the same app, not a separate service.
+- `/knowledge` supports three response modes: `RAG`, `Ask`, and admin-only `Agent`.
+- Qwen API key, selected model, and web-search capability are stored per user.
+- Web search uses Qwen compatible chat completions with `enable_search=true`.
+- Agent orchestration lives under `backend/src/main/java/com/hejulian/blog/agent` and is exposed through `/api/agent/**`.
+- Static `/resume` is served by nginx from `frontend/public/resume/index.html`, not by Vue Router.
 
-## Task routing
+## Reference routing
 
-Read only the subsection that matches the task.
+### Frontend UI, routes, stores, API client
 
-### Frontend task
+Read `references/frontend.md`.
+Also read `references/rag.md` for `/knowledge`, chat modes, sources, or SSE.
 
-Use for Vue pages, layouts, routes, UI, theme, copy, or client-side interaction.
+### Backend APIs, services, auth, persistence, schema
 
-Read:
+Read `references/backend.md`.
+Also read `references/rag.md` for chat/retrieval/model behavior or `references/deployment.md` for runtime wiring.
 
-- `references/frontend.md`
+### `/knowledge`, RAG, Ask, history, sources, feedback, SSE
 
-Also read if needed:
+Read `references/rag.md` first.
+Also read `references/frontend.md` if changing UI and `references/backend.md` if changing API/service/persistence contracts.
 
-- `references/rag.md` for `/knowledge`
-- `references/resume.md` for `/resume`
+### Agent writing/publishing workflow, tools, trace, ops
 
-### Backend task
+Read `references/agent.md` first.
+Also read `references/rag.md` for shared Qwen runtime/SSE behavior and `references/backend.md` for persistence/security.
 
-Use for controllers, services, auth, uploads, public APIs, admin APIs, persistence, or schema work.
+### Docker, nginx, runtime config, logs, static serving
 
-Read:
+Read `references/deployment.md`.
+Also read `references/resume.md` for `/resume` or `references/rag.md` for SSE buffering.
 
-- `references/backend.md`
+### Static resume
 
-Also read if needed:
+Read `references/resume.md`.
+Do not assume `/resume` is a Vue route.
 
-- `references/rag.md` for chat or retrieval behavior
-- `references/deployment.md` for runtime wiring or static serving
+### Code review
 
-### RAG or `/knowledge` task
-
-Use for chat, retrieval, search mode, history, sources, replay, feedback, session lifecycle, or SSE behavior.
-
-Read:
-
-- `references/rag.md`
-
-Also read if needed:
-
-- `references/frontend.md`
-- `references/backend.md`
-
-### Deployment or static delivery task
-
-Use for Docker, nginx, uploads exposure, bind mounts, runtime config, or static asset delivery.
-
-Read:
-
-- `references/deployment.md`
-
-Also read if needed:
-
-- `references/resume.md` for `/resume`
-- `references/backend.md` for uploads or runtime config
-
-### Resume task
-
-Use only when the task is about the online resume at `/resume`.
-
-Read:
-
-- `references/resume.md`
-
-Also read if needed:
-
-- `references/deployment.md`
-
-### Review task
-
-Use when reviewing code changes in this repo.
-
-Read:
-
-- `references/review.md`
-
-Then load only the additional references needed by the affected files.
+Read `references/review.md`, then the affected-area reference.
 
 ## Cross-cutting guardrails
 
-These apply regardless of task type.
+- Prefer Chinese for user-facing explanations in this repository.
+- When visible text changes, update Chinese and English branches together when both exist.
+- Encoding is mandatory: all project files and skill files must be treated as UTF-8.
+- When reading or writing files from PowerShell, specify UTF-8 explicitly. Avoid default ANSI/GBK or locale-dependent encodings.
+- For scripted writes, prefer UTF-8 without BOM when safe, for example `.NET UTF8Encoding($false)`. Do not rewrite existing UTF-8 files with a non-UTF-8 encoding.
+- Do not bulk-read the repo. Use targeted files from the reference maps.
+- Do not revert unrelated work; assume the worktree may already be dirty.
+- For schema-impacting changes, check entity, mapper interface, mapper XML, service caller, SQL initializer, and schema compatibility initializer.
+- For writes affecting public content, RAG sessions, history, Qwen config, or Agent tasks, check Redis cache invalidation.
+- For SSE issues, check backend emitter, frontend `fetch` stream parser, and nginx `proxy_buffering off`.
+- For Docker frontend nginx changes, update `frontend/nginx/default.conf.template`; `default.conf` alone is not enough for container builds.
 
-### Working style
+## Preferred validation
 
-Before changing code:
-
-1. Give a short numbered task list first.
-2. Follow that list strictly.
-3. Do not bundle unrelated feature changes.
-
-While working:
-
-- Prefer Chinese in user-facing communication.
-- Keep edits small and targeted.
-- Preserve existing behavior unless the user asked to change it.
-- Assume the git worktree may already be dirty and never revert unrelated changes.
-
-### Locale
-
-If visible text changes:
-
-- update both Chinese and English when both exist
-- Chinese mode should read naturally
-- do not add visible English-only text to Chinese UI by accident
-
-### Persistence
-
-If schema or stored data changes, do not assume one file is enough.
-Check whether the change belongs in:
-
-- `sql/blog_mysql_init.sql`
-- mapper XML
-- repository or service code
-- `UserSchemaInitializer.java`
-- `RagSchemaInitializer.java`
-
-### Caching and refresh behavior
-
-Be careful with refresh cost and cache invalidation.
-
-Current expectations:
-
-- `GET /api/auth/qwen-config` should behave like a read-mostly endpoint
-- page refresh should not re-probe all remote model capabilities
-- `POST /api/auth/qwen-config` is the right place to refresh capability detection
-- RAG session and history writes should evict related caches
+- Frontend: `npm run build` in `frontend/`.
+- Backend: local Maven if available, otherwise `docker compose build backend` from repo root.
+- Full container refresh when needed: `docker compose up -d --build`.
+- Do not run expensive validation unless the user asks or the change is compile-sensitive.
