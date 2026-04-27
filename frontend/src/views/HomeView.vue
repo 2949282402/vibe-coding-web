@@ -205,70 +205,83 @@ onMounted(loadData);
 
 <style scoped>
 .hero-panel {
-  padding: 46px;
+  padding: 40px;
   display: grid;
-  grid-template-columns: 1.34fr 0.8fr;
-  gap: 28px;
-  overflow: hidden;
-}
-
-.hero-panel::after {
-  content: "";
-  position: absolute;
-  right: -60px;
-  top: -40px;
-  width: 240px;
-  height: 240px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(220, 193, 136, 0.22), transparent 68%);
-  pointer-events: none;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.76fr);
+  gap: 24px;
+  align-items: stretch;
 }
 
 .hero-copy {
-  position: relative;
-  z-index: 1;
-  max-width: 760px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.hero-title {
+  margin: 0;
+  max-width: 720px;
+  font-size: clamp(2.4rem, 5vw, 4.4rem);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
 }
 
 .hero-desc {
   max-width: 640px;
-  margin-top: 18px;
-  font-size: 1.1rem;
-  line-height: 1.95;
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.85;
 }
 
 .hero-stats {
-  padding: 26px;
-  border-radius: var(--radius-xl);
+  padding: 16px;
+  border-radius: 28px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 12px;
   align-self: stretch;
 }
 
 .hero-stats div {
-  padding: 22px 20px;
+  display: grid;
+  gap: 8px;
+  padding: 18px;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: rgba(255, 248, 233, 0.05);
+  background: var(--bg-panel);
 }
 
 .hero-stats strong {
   display: block;
-  font-size: 2.6rem;
-  margin-bottom: 10px;
-  letter-spacing: -0.06em;
+  font-size: clamp(1.9rem, 3.5vw, 2.6rem);
+  line-height: 1;
+  letter-spacing: -0.07em;
 }
 
 .hero-stats span {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .search-panel {
-  margin-top: 24px;
+  margin-top: 22px;
   padding: 28px;
 }
 
@@ -276,27 +289,42 @@ onMounted(loadData);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .search-result-panel {
   margin-top: 18px;
-  padding: 18px;
+  padding: 20px;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: rgba(255, 248, 233, 0.04);
+  background: var(--bg-panel);
+}
+
+.search-answer {
+  display: grid;
+  gap: 18px;
 }
 
 .search-answer :deep(p) {
+  margin: 0;
   line-height: 1.85;
 }
 
 .source-list {
-  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.source-list strong {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .content-section {
-  margin-top: 30px;
+  margin-top: 28px;
+  align-items: start;
 }
 
 .stack,
@@ -304,7 +332,7 @@ onMounted(loadData);
 .post-stack {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .sidebar-card {
@@ -312,39 +340,56 @@ onMounted(loadData);
 }
 
 .rag-card {
-  gap: 18px;
-  background:
-    linear-gradient(180deg, rgba(220, 193, 136, 0.12), rgba(255, 248, 233, 0.04)),
-    rgba(21, 18, 14, 0.94);
+  display: grid;
+  gap: 12px;
 }
 
 .rag-copy {
-  margin: 0 0 18px;
+  margin: 0;
   line-height: 1.8;
 }
 
-.rag-link {
+.rag-link,
+.all-link {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0 18px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--accent-soft);
-  color: var(--text-main);
-  letter-spacing: 0.08em;
-  font-size: 0.8rem;
+  gap: 8px;
 }
 
-.all-link {
-  letter-spacing: 0.08em;
-  font-size: 0.82rem;
+.rag-link {
+  min-height: 42px;
+  width: fit-content;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--accent);
+  color: var(--bg-main);
+  font-weight: 600;
+}
+
+html[data-theme='light'] .rag-link {
+  color: #ffffff;
 }
 
 @media (max-width: 960px) {
-  .hero-panel,
+  .hero-panel {
+    grid-template-columns: 1fr;
+    padding: 30px;
+  }
+}
+
+@media (max-width: 720px) {
   .search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-panel,
+  .search-panel,
+  .sidebar-card {
+    padding: 22px;
+  }
+
+  .hero-stats {
     grid-template-columns: 1fr;
   }
 }

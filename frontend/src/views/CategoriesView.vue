@@ -85,11 +85,11 @@ onMounted(loadData);
 }
 
 .taxonomy-kicker {
-  display: inline-block;
+  display: inline-flex;
   margin-bottom: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  font-size: 0.76rem;
+  font-size: 0.74rem;
 }
 
 .taxonomy-head h2 {
@@ -105,20 +105,19 @@ onMounted(loadData);
 }
 
 .taxonomy-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
   padding: 20px 22px;
-  border-radius: 22px;
+  border-radius: 20px;
   border: 1px solid var(--line);
-  background: rgba(255, 248, 233, 0.035);
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  background: var(--bg-panel);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .taxonomy-item:hover {
-  transform: translateY(-2px);
   border-color: var(--line-strong);
-  background: rgba(255, 248, 233, 0.06);
+  background: var(--bg-panel-strong);
 }
 
 .taxonomy-copy {
@@ -133,7 +132,7 @@ onMounted(loadData);
 
 .taxonomy-copy p {
   margin: 8px 0 0;
-  line-height: 1.7;
+  line-height: 1.72;
 }
 
 .taxonomy-count {
@@ -144,7 +143,7 @@ onMounted(loadData);
   border: 1px solid var(--line);
   color: var(--text-secondary);
   font-size: 0.8rem;
-  background: var(--accent-soft);
+  background: var(--bg-panel-strong);
 }
 
 .tag-cloud {
@@ -162,7 +161,7 @@ onMounted(loadData);
   }
 
   .taxonomy-item {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 }
 </style>

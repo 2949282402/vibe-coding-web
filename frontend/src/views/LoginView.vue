@@ -160,14 +160,14 @@ async function register() {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at top, rgba(220, 193, 136, 0.18), transparent 24%),
-    linear-gradient(180deg, #17130f 0%, #100d0a 100%);
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 24%),
+    linear-gradient(180deg, #121316 0%, #0c0d10 100%);
 }
 
 html[data-theme='light'] .login-shell {
   background:
-    radial-gradient(circle at top, rgba(181, 143, 76, 0.12), transparent 24%),
-    linear-gradient(180deg, #faf5ec 0%, #efe7da 100%);
+    radial-gradient(circle at top, rgba(0, 0, 0, 0.06), transparent 24%),
+    linear-gradient(180deg, #f7f7f5 0%, #eeeeeb 100%);
 }
 
 .login-toolbar {
@@ -208,12 +208,13 @@ h1 {
 
 .tab-btn {
   min-height: 44px;
-  border-radius: 14px;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .tab-btn.active {

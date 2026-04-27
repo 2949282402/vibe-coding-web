@@ -13,19 +13,21 @@ const preferences = usePreferencesStore();
 
 <template>
   <router-link :to="`/posts/${post.slug}`" class="post-card section-card">
-    <div class="cover" :style="{ backgroundImage: `url(${post.coverImage || ''})` }">
-      <div class="cover-overlay"></div>
-    </div>
+    <div class="cover" :style="{ backgroundImage: `url(${post.coverImage || ''})` }"></div>
     <div class="body">
       <div class="meta muted">
         <span>{{ post.categoryName || preferences.t('post.uncategorized') }}</span>
         <span>{{ preferences.formatDate(post.publishedAt) }}</span>
-        <span>{{ preferences.t('post.views', { count: post.viewCount }) }}</span>
       </div>
-      <h3>{{ post.title }}</h3>
-      <p>{{ post.summary }}</p>
-      <div class="chip-list">
-        <span v-for="tag in post.tags" :key="tag" class="chip"># {{ tag }}</span>
+      <div class="copy">
+        <h3>{{ post.title }}</h3>
+        <p>{{ post.summary }}</p>
+      </div>
+      <div class="post-footer">
+        <span class="views muted">{{ preferences.t('post.views', { count: post.viewCount }) }}</span>
+        <div class="chip-list">
+          <span v-for="tag in post.tags" :key="tag" class="chip"># {{ tag }}</span>
+        </div>
       </div>
     </div>
   </router-link>
@@ -35,63 +37,96 @@ const preferences = usePreferencesStore();
 .post-card {
   overflow: hidden;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  min-height: 272px;
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  grid-template-columns: 240px minmax(0, 1fr);
+  min-height: 248px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .post-card:hover {
-  transform: translateY(-5px);
   border-color: var(--line-strong);
-  box-shadow: 0 30px 72px rgba(36, 24, 9, 0.24);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.14);
 }
 
 .cover {
-  min-height: 272px;
+  min-height: 248px;
   position: relative;
   background:
-    linear-gradient(135deg, rgba(255, 240, 214, 0.22), rgba(18, 14, 10, 0.8)),
-    #1d1712;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.18)),
+    linear-gradient(135deg, #242529, #131417);
   background-size: cover;
   background-position: center;
+  border-right: 1px solid var(--line);
 }
 
-.cover-overlay {
-  position: absolute;
-  inset: 0;
+html[data-theme='light'] .cover {
   background:
-    linear-gradient(180deg, transparent, rgba(17, 13, 9, 0.58)),
-    linear-gradient(90deg, rgba(255, 244, 220, 0.1), transparent 34%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.04)),
+    linear-gradient(135deg, #d9d9d6, #f6f6f4);
 }
 
 .body {
-  padding: 28px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 26px 28px;
 }
 
 .meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.copy {
+  display: grid;
+  gap: 12px;
 }
 
 h3 {
-  margin: 18px 0 14px;
-  font-size: 1.72rem;
-  line-height: 1.18;
+  margin: 0;
+  font-size: 1.6rem;
+  line-height: 1.16;
   letter-spacing: -0.04em;
 }
 
 p {
-  margin: 0 0 18px;
-  line-height: 1.8;
+  margin: 0;
+  line-height: 1.75;
   color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.post-footer {
+  display: grid;
+  gap: 12px;
+}
+
+.views {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chip-list {
+  margin-top: auto;
 }
 
 @media (max-width: 720px) {
   .post-card {
     grid-template-columns: 1fr;
+  }
+
+  .cover {
+    min-height: 190px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
 }
 </style>

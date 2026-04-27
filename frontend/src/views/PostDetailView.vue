@@ -80,9 +80,20 @@ onMounted(loadPost);
           <p class="eyebrow muted">{{ post.categoryName }} / {{ preferences.formatDateTime(post.publishedAt) }}</p>
           <h1>{{ post.title }}</h1>
           <p class="lead">{{ post.summary }}</p>
+
+          <div class="article-context">
+            <div class="article-meta muted">
+              <span>{{ preferences.t('post.views', { count: post.viewCount }) }}</span>
+              <span>{{ preferences.t('post.comments', { count: post.comments.length }) }}</span>
+            </div>
+
+            <div class="chip-list article-tags">
+              <span v-for="tag in post.tags" :key="tag" class="chip"># {{ tag }}</span>
+            </div>
+          </div>
         </div>
 
-        <div class="article-overview glass-panel">
+        <aside class="article-overview glass-panel">
           <div class="overview-item">
             <span class="overview-label muted">{{ preferences.t('post.views', { count: post.viewCount }) }}</span>
             <strong>{{ post.viewCount }}</strong>
@@ -91,16 +102,11 @@ onMounted(loadPost);
             <span class="overview-label muted">{{ preferences.t('post.comments', { count: post.comments.length }) }}</span>
             <strong>{{ post.comments.length }}</strong>
           </div>
-        </div>
+        </aside>
       </div>
 
-      <div class="article-meta muted">
-        <span>{{ preferences.t('post.views', { count: post.viewCount }) }}</span>
-        <span>{{ preferences.t('post.comments', { count: post.comments.length }) }}</span>
-      </div>
-
-      <div class="chip-list article-tags">
-        <span v-for="tag in post.tags" :key="tag" class="chip"># {{ tag }}</span>
+      <div v-if="post.coverImage" class="article-cover-wrap">
+        <img :src="post.coverImage" :alt="post.title" class="article-cover" />
       </div>
 
       <div class="article-body-wrap">
@@ -114,7 +120,7 @@ onMounted(loadPost);
           <span class="comment-kicker muted">{{ copy.discussion }}</span>
           <h2>{{ preferences.t('post.commentsTitle') }}</h2>
         </div>
-        <span class="muted">{{ preferences.t('post.comments', { count: post.comments.length }) }}</span>
+        <span class="comment-total muted">{{ preferences.t('post.comments', { count: post.comments.length }) }}</span>
       </div>
 
       <el-alert
@@ -170,9 +176,8 @@ onMounted(loadPost);
 
 <style scoped>
 .detail-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  display: grid;
+  gap: 24px;
 }
 
 .article-panel,
@@ -181,110 +186,159 @@ onMounted(loadPost);
 }
 
 .article-panel {
-  background:
-    radial-gradient(circle at top center, rgba(220, 193, 136, 0.16), transparent 26%),
-    rgba(21, 18, 14, 0.95);
+  display: grid;
+  gap: 30px;
 }
 
 .article-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 26px;
+  grid-template-columns: minmax(0, 1.3fr) 220px;
+  gap: 30px;
   align-items: start;
 }
 
 .article-hero-copy {
   min-width: 0;
+  display: grid;
+  gap: 16px;
 }
 
 .eyebrow,
 .comment-kicker {
   margin: 0;
-  letter-spacing: 0.1em;
-  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  font-size: 0.74rem;
+  text-transform: uppercase;
 }
 
 h1 {
-  margin: 12px 0 16px;
-  font-size: clamp(2.3rem, 4.8vw, 4.1rem);
-  line-height: 1;
+  margin: 0;
+  max-width: 900px;
+  font-size: clamp(2rem, 4vw, 3.35rem);
+  line-height: 1.1;
   letter-spacing: -0.05em;
+  text-wrap: balance;
 }
 
 .lead {
   max-width: 760px;
-  color: var(--text-secondary);
-  font-size: 1.05rem;
-  line-height: 1.9;
   margin: 0;
+  color: var(--text-secondary);
+  font-size: 1.02rem;
+  line-height: 1.88;
+}
+
+.article-context {
+  display: grid;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.article-tags {
+  gap: 10px;
 }
 
 .article-overview {
-  padding: 20px;
+  padding: 16px;
   border-radius: 24px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
+  align-self: start;
 }
 
 .overview-item {
   padding: 16px 18px;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: rgba(255, 248, 233, 0.05);
+  background: var(--bg-panel);
+  display: grid;
+  gap: 8px;
 }
 
 .overview-item strong {
   display: block;
-  margin-top: 8px;
-  font-size: 1.8rem;
+  font-size: 1.9rem;
   line-height: 1;
+  letter-spacing: -0.05em;
 }
 
 .overview-label {
   display: block;
-  font-size: 0.74rem;
-  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
-.article-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  margin: 22px 0 16px;
-  font-size: 0.86rem;
+.article-cover-wrap {
+  overflow: hidden;
+  border-radius: 26px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
 }
 
-.article-tags {
-  margin-bottom: 18px;
+.article-cover {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
 }
 
 .article-body-wrap {
-  padding: 28px 0 8px;
   border-top: 1px solid var(--line);
+  padding-top: 34px;
 }
 
 .article-body {
-  max-width: 860px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.comment-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.comment-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
 }
 
 .comment-heading h2 {
   margin: 8px 0 0;
 }
 
+.comment-total {
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .comment-form,
 .comment-login-card {
-  margin: 20px 0 30px;
   padding: 24px;
-  border-radius: 24px;
+  border-radius: 22px;
   border: 1px solid var(--line);
-  background:
-    linear-gradient(180deg, rgba(255, 248, 233, 0.05), rgba(255, 248, 233, 0.02)),
-    rgba(23, 20, 16, 0.96);
+  background: var(--bg-panel);
+}
+
+.comment-login-card {
+  display: grid;
+  gap: 10px;
 }
 
 .comment-login-card p {
-  margin: 8px 0 16px;
+  margin: 0;
 }
 
 .comment-form-head {
@@ -301,7 +355,7 @@ h1 {
 }
 
 .comment-alert {
-  margin: 16px 0 28px;
+  margin: 0;
 }
 
 .comment-actions {
@@ -310,22 +364,21 @@ h1 {
 }
 
 .comment-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 14px;
-  margin-top: 8px;
 }
 
 .comment-item {
   padding: 18px 20px;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid var(--line);
-  background: rgba(255, 248, 233, 0.04);
+  background: var(--bg-panel);
 }
 
 .comment-item p {
   margin: 10px 0 0;
   line-height: 1.75;
+  word-break: break-word;
 }
 
 .comment-head {
@@ -338,48 +391,130 @@ h1 {
   margin: 6px 0 0;
 }
 
+.markdown-body {
+  color: var(--text-primary);
+}
+
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
-.markdown-body :deep(h3) {
-  margin: 1.2em 0 0.6em;
+.markdown-body :deep(h3),
+.markdown-body :deep(h4) {
+  margin: 1.4em 0 0.7em;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
 }
 
 .markdown-body :deep(p),
 .markdown-body :deep(ul),
-.markdown-body :deep(ol) {
+.markdown-body :deep(ol),
+.markdown-body :deep(blockquote) {
   line-height: 1.9;
+}
+
+.markdown-body :deep(p),
+.markdown-body :deep(ul),
+.markdown-body :deep(ol),
+.markdown-body :deep(pre),
+.markdown-body :deep(blockquote),
+.markdown-body :deep(table) {
+  margin: 0 0 1.2rem;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 1.3rem;
+}
+
+.markdown-body :deep(li + li) {
+  margin-top: 0.35rem;
+}
+
+.markdown-body :deep(a) {
+  color: var(--text-primary);
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 0.18em;
+}
+
+.markdown-body :deep(blockquote) {
+  margin-left: 0;
+  padding: 0.9rem 1rem;
+  border-left: 3px solid var(--line-strong);
+  border-radius: 0 16px 16px 0;
+  color: var(--text-secondary);
+  background: var(--bg-panel);
 }
 
 .markdown-body :deep(pre) {
   overflow: auto;
-  padding: 16px;
-  border-radius: 16px;
-  background: #000;
-  color: #f5f5f5;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--line);
 }
 
 .markdown-body :deep(code) {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.92em;
+  word-break: break-word;
 }
 
-.markdown-body :deep(blockquote) {
-  margin: 0;
-  padding: 0.85rem 1.1rem;
-  border-left: 4px solid rgba(255, 255, 255, 0.3);
-  color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 0 14px 14px 0;
+.markdown-body :deep(pre code) {
+  color: inherit;
+  word-break: normal;
 }
 
 .markdown-body :deep(img) {
+  display: block;
   max-width: 100%;
-  border-radius: 16px;
+  margin: 1.4rem auto;
+  border-radius: 18px;
 }
 
-@media (max-width: 900px) {
+.markdown-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  table-layout: fixed;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  word-break: break-word;
+}
+
+.markdown-body :deep(th) {
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.markdown-body :deep(tr:last-child td) {
+  border-bottom: 0;
+}
+
+@media (max-width: 960px) {
   .article-hero {
     grid-template-columns: 1fr;
+  }
+
+  .article-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .article-cover {
+    max-height: 320px;
+  }
+
+  .article-body {
+    max-width: 100%;
+    margin: 0;
   }
 }
 
@@ -389,16 +524,18 @@ h1 {
     padding: 22px;
   }
 
+  .comment-heading,
   .comment-head {
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .comment-actions {
-    justify-content: stretch;
+  .article-overview {
+    grid-template-columns: 1fr;
   }
 
-  .comment-actions :deep(.el-button) {
-    width: 100%;
+  .article-cover {
+    max-height: 240px;
   }
 }
 </style>

@@ -179,18 +179,19 @@ onMounted(async () => {
 }
 
 .archive-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 20px;
   margin-bottom: 24px;
 }
 
 .archive-kicker {
-  display: inline-block;
-  margin-bottom: 10px;
+  display: inline-flex;
+  margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  font-size: 0.76rem;
+  font-size: 0.74rem;
 }
 
 .archive-hero h2 {
@@ -201,23 +202,22 @@ onMounted(async () => {
 
 .archive-overview {
   min-width: 180px;
-  padding: 20px 22px;
-  border-radius: 24px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  padding: 18px 20px;
+  border-radius: 22px;
+  display: grid;
   gap: 10px;
 }
 
 .archive-overview strong {
-  font-size: 2rem;
+  font-size: 2.1rem;
   line-height: 1;
+  letter-spacing: -0.06em;
 }
 
 .summary-text {
   max-width: 720px;
   margin: 10px 0 0;
-  line-height: 1.8;
+  line-height: 1.82;
 }
 
 .toolbar {
@@ -227,16 +227,16 @@ onMounted(async () => {
   margin-bottom: 20px;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 24px;
-  background: rgba(255, 248, 233, 0.04);
+  border-radius: 22px;
+  background: var(--bg-panel);
 }
 
 .filter-summary {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .archive-group + .archive-group {
-  margin-top: 34px;
+  margin-top: 30px;
 }
 
 .archive-group-head {
@@ -249,21 +249,21 @@ onMounted(async () => {
 
 .archive-group h3 {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: 0.94rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
 
 .archive-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 18px;
   padding: 20px 22px;
   border: 1px solid var(--line);
-  border-radius: 22px;
-  background: rgba(255, 248, 233, 0.035);
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  border-radius: 20px;
+  background: var(--bg-panel);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .archive-item + .archive-item {
@@ -271,9 +271,8 @@ onMounted(async () => {
 }
 
 .archive-item:hover {
-  transform: translateY(-2px);
   border-color: var(--line-strong);
-  background: rgba(255, 248, 233, 0.06);
+  background: var(--bg-panel-strong);
 }
 
 .archive-copy {
@@ -287,17 +286,18 @@ onMounted(async () => {
 }
 
 .archive-meta {
-  min-width: 130px;
+  min-width: 138px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
   font-size: 0.78rem;
+  text-align: right;
 }
 
 .item-summary {
   margin: 8px 0 0;
-  line-height: 1.7;
+  line-height: 1.72;
 }
 
 .empty {
@@ -312,7 +312,7 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   padding-top: 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--line);
 }
 
 .pager-actions {
@@ -320,33 +320,31 @@ onMounted(async () => {
   gap: 12px;
 }
 
-@media (max-width: 840px) {
-  .archive-hero,
-  .archive-item,
-  .pager {
-    flex-direction: column;
-  }
-
-  .archive-meta {
-    align-items: flex-start;
-  }
-}
-
 @media (max-width: 720px) {
   .archive-panel {
     padding: 22px;
+  }
+
+  .archive-hero,
+  .archive-item,
+  .pager {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .toolbar {
     grid-template-columns: 1fr;
   }
 
-  .pager-actions {
-    width: 100%;
+  .archive-meta {
+    min-width: 0;
+    align-items: flex-start;
+    text-align: left;
   }
 
-  .pager-actions :deep(.el-button) {
-    flex: 1;
+  .pager-actions {
+    width: 100%;
   }
 }
 </style>

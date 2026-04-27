@@ -231,7 +231,13 @@ onMounted(loadData);
 .metric-card-accent {
   border-color: var(--line-strong);
   background:
-    linear-gradient(180deg, rgba(220, 193, 136, 0.12), rgba(255, 248, 233, 0.04)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 100%),
+    var(--admin-surface-bg);
+}
+
+html[data-theme='light'] .metric-card-accent {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.03), transparent 100%),
     var(--admin-surface-bg);
 }
 
@@ -266,7 +272,7 @@ onMounted(loadData);
 
 .rag-metric {
   padding: 18px 18px 20px;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid var(--line);
   background: var(--admin-soft-bg);
 }
@@ -325,20 +331,14 @@ onMounted(loadData);
   }
 }
 
-@media (max-width: 640px) {
-  .card-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .rag-panel-head,
-  .feedback-row-head,
-  .feedback-row-meta {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
+@media (max-width: 720px) {
+  .card-grid,
   .rag-metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rag-panel-head {
+    flex-direction: column;
   }
 }
 </style>

@@ -341,7 +341,20 @@ const copy = computed(() => {
       agentTraceNoTools: '暂无工具调用',
       agentTracePermission: '权限',
       agentTraceSuccess: '成功',
-      agentTraceFailed: '失败'
+      agentTraceFailed: '失败',
+      agentCompletedSummary: 'Agent 已完成任务，完整内容见下方执行轨迹中的最终文章。',
+      agentPublishedPrefix: '已发布',
+      agentVisitPath: '访问路径',
+      agentFinalArticleHint: '完整文章已放在下方执行轨迹的最后。',
+      agentWorkingHeadline: 'Agent 正在工作，下面是实时消息流',
+      agentWorkingTail: '完成后，最终文章会出现在执行轨迹的最后。',
+      agentWorkingFallback: 'Agent 正在处理中...',
+      requestFailed: '请求失败',
+      streamFailed: '流式请求失败',
+      agentStreamFailed: 'Agent 流式请求失败',
+      ready: '已就绪',
+      statusCompleted: '已完成',
+      statusFailed: '失败'
     };
   }
 
@@ -428,7 +441,14 @@ const copy = computed(() => {
     agentTraceNoTools: 'No tool calls',
     agentTracePermission: 'Permission',
     agentTraceSuccess: 'Success',
-    agentTraceFailed: 'Failed'
+    agentTraceFailed: 'Failed',
+    agentCompletedSummary: 'The agent has finished the task. The final article is shown in the execution trace below.',
+    agentPublishedPrefix: 'Published',
+    agentVisitPath: 'Path',
+    agentFinalArticleHint: 'The full article appears at the end of the execution trace below.',
+    agentWorkingHeadline: 'The agent is working. Live progress appears below.',
+    agentWorkingTail: 'When it finishes, the final article will appear at the end of the execution trace.',
+    agentWorkingFallback: 'The agent is working...'
   };
 });
 
@@ -560,14 +580,14 @@ function normalizeAgentAnswer(task) {
   const publishedMatch = raw.match(/Published post:\s*(.+?)\s*\((\/[^)]+)\)\s*$/);
   const article = raw.replace(/\n\nPublished post:.+$/s, '').trim();
   if (!publishedMatch) {
-    return 'Agent 已完成任务，完整内容见下方 Execution Trace 的最终文章。';
+    return copy.value.agentCompletedSummary;
   }
 
   return [
-    `已发布：${publishedMatch[1]}`,
-    `访问路径：${publishedMatch[2]}`,
+    `${copy.value.agentPublishedPrefix}：${publishedMatch[1]}`,
+    `${copy.value.agentVisitPath}：${publishedMatch[2]}`,
     '',
-    '完整文章已放在下方 Execution Trace 的最后。'
+    copy.value.agentFinalArticleHint
   ].join('\n');
 }
 
@@ -614,7 +634,7 @@ function buildAgentProgressEntry(payload) {
     : '';
   const prefix = timeText ? `[${timeText}] ` : '';
   if (!message) {
-    return `${prefix}Agent is working...`;
+    return `${prefix}${copy.value.agentWorkingFallback}`;
   }
   const step = Number(payload?.currentStep || 0);
   const status = String(payload?.status || 'RUNNING').toLowerCase();
@@ -626,11 +646,11 @@ function buildAgentProgressContent(messages = [], latestPayload = null) {
     ? messages
     : [buildAgentProgressEntry(latestPayload)];
   return [
-    '**Agent 正在工作，下面是实时消息流**',
+    `**${copy.value.agentWorkingHeadline}**`,
     '',
     ...entries.map((entry) => `- ${entry}`),
     '',
-    '完成后，最终文章会出现在 Execution Trace 的最后。'
+    copy.value.agentFinalArticleHint
   ].join('\n');
 }
 
@@ -796,7 +816,7 @@ const qwenCopy = computed(() =>
         model: '对话模型',
         localOnlyLocked: '当前模型不支持联网搜索，已强制使用仅站内检索。',
         noModels: '保存 Key 后会显示可用模型列表',
-        saved: '配置已保存',
+        success: '配置已保存',
         editApiKey: 'API Key',
         cancelEditApiKey: '取消修改'
       }
@@ -812,7 +832,7 @@ const qwenCopy = computed(() =>
         model: 'Chat Model',
         localOnlyLocked: 'This model does not support web search, so local retrieval is enforced.',
         noModels: 'Available models will appear after the key is saved',
-        saved: 'Configuration saved',
+        success: 'Configuration saved',
         editApiKey: 'API Key',
         cancelEditApiKey: 'Cancel'
       }
@@ -826,7 +846,19 @@ const uiCopy = computed(() =>
         fullscreenExit: '退出全屏',
         sourcesCollapse: '收起参考栏',
         sourcesExpand: '展开参考栏',
-        configToolsOpen: '展开模型设置'
+        configToolsOpen: '展开模型设置',
+        sidebarCollapse: '收起会话栏',
+        sidebarExpand: '展开会话栏',
+        feedbackHelpful: '有帮助',
+        feedbackNeedsWork: '需改进',
+        feedbackMarkedHelpful: '已标记为有帮助',
+        feedbackMarkedNeedsWork: '已标记为需改进',
+        finalArticle: '最终文章',
+        dialogCancel: '取消',
+        drawerClose: '关闭会话侧栏',
+        panelHide: '隐藏面板',
+        panelOpen: '打开面板',
+        fullscreenUnavailable: '当前环境不支持全屏'
       }
     : {
         composerSubmitHint: 'Enter to send',
@@ -835,7 +867,19 @@ const uiCopy = computed(() =>
         fullscreenExit: 'Exit fullscreen',
         sourcesCollapse: 'Collapse sources',
         sourcesExpand: 'Expand sources',
-        configToolsOpen: 'Open model settings'
+        configToolsOpen: 'Open model settings',
+        sidebarCollapse: 'Collapse session panel',
+        sidebarExpand: 'Expand session panel',
+        feedbackHelpful: 'Helpful',
+        feedbackNeedsWork: 'Needs work',
+        feedbackMarkedHelpful: 'Marked helpful',
+        feedbackMarkedNeedsWork: 'Marked needs work',
+        finalArticle: 'Final Article',
+        dialogCancel: 'Cancel',
+        drawerClose: 'Close session sidebar',
+        panelHide: 'Hide Panel',
+        panelOpen: 'Open Panel',
+        fullscreenUnavailable: 'Fullscreen unavailable'
       }
 );
 const hasQwenConfig = computed(() => Boolean(qwenConfig.value.hasApiKey && qwenConfig.value.selectedModel));
@@ -1457,7 +1501,7 @@ async function submitAnswerFeedback(message, helpful) {
           inputType: 'textarea',
           inputPlaceholder: feedbackCopy.value.placeholder,
           confirmButtonText: feedbackCopy.value.confirm,
-          cancelButtonText: feedbackCopy.value.cancel,
+          cancelButtonText: uiCopy.value.dialogCancel,
           closeOnClickModal: false,
           closeOnPressEscape: true,
           distinguishCancelAndClose: true
@@ -1604,7 +1648,7 @@ async function saveQwenConfig(selectedModel = '') {
     if (!res.data.webSearchEnabled) {
       searchMode.value = SEARCH_MODE_LOCAL_ONLY;
     }
-    ElMessage.success(qwenCopy.value.saved);
+    ElMessage.success(qwenCopy.value.success);
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || error?.message || 'Request failed');
   } finally {
@@ -1633,7 +1677,7 @@ async function toggleChatStageFullscreen() {
     }
     await chatStageRef.value?.requestFullscreen?.();
   } catch (error) {
-    ElMessage.error(error?.message || 'Fullscreen unavailable');
+    ElMessage.error(error?.message || uiCopy.value.fullscreenUnavailable);
   }
 }
 
@@ -1919,7 +1963,7 @@ async function renameSession(session) {
       inputValue: session.title,
       inputPlaceholder: copy.value.renamePlaceholder,
       confirmButtonText: copy.value.rename,
-      cancelButtonText: 'Cancel'
+      cancelButtonText: uiCopy.value.dialogCancel
     });
 
     if (!value?.trim()) {
@@ -1940,7 +1984,7 @@ async function deleteSession(session) {
   try {
     await ElMessageBox.confirm(copy.value.deleteConfirmBody, copy.value.deleteConfirmTitle, {
       confirmButtonText: copy.value.remove,
-      cancelButtonText: 'Cancel',
+      cancelButtonText: uiCopy.value.dialogCancel,
       type: 'warning'
     });
 
@@ -1977,7 +2021,7 @@ async function purgeSession(session) {
   try {
     await ElMessageBox.confirm(copy.value.purgeConfirmBody, copy.value.purgeConfirmTitle, {
       confirmButtonText: copy.value.purge,
-      cancelButtonText: 'Cancel',
+      cancelButtonText: uiCopy.value.dialogCancel,
       type: 'warning'
     });
 
@@ -2105,7 +2149,7 @@ onBeforeUnmount(() => {
       v-if="drawerMode && sidebarDrawerOpen"
       type="button"
       class="sidebar-overlay"
-      aria-label="Close session sidebar"
+      :aria-label="uiCopy.drawerClose"
       @click="closeSidebar()"
     ></button>
 
@@ -2114,7 +2158,7 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="sidebar-toggle"
-          :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+          :aria-label="sidebarExpanded ? uiCopy.sidebarCollapse : uiCopy.sidebarExpand"
           @click="toggleSidebar()"
         >
           <span></span>
@@ -2237,10 +2281,10 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="rail-toggle"
-            :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+            :aria-label="sidebarExpanded ? uiCopy.sidebarCollapse : uiCopy.sidebarExpand"
             @click="toggleSidebar()"
           >
-            {{ sidebarExpanded ? 'Hide Panel' : 'Open Panel' }}
+            {{ sidebarExpanded ? uiCopy.panelHide : uiCopy.panelOpen }}
           </button>
           <div v-if="result" class="stage-badges">
             <span class="stage-badge">{{
@@ -2323,7 +2367,7 @@ onBeforeUnmount(() => {
                   :disabled="feedbackSubmittingId === message.id"
                   @click="submitAnswerFeedback(message, true)"
                 >
-                  Helpful
+                  {{ uiCopy.feedbackHelpful }}
                 </button>
                 <button
                   type="button"
@@ -2332,10 +2376,10 @@ onBeforeUnmount(() => {
                   :disabled="feedbackSubmittingId === message.id"
                   @click="submitAnswerFeedback(message, false)"
                 >
-                  Needs work
+                  {{ uiCopy.feedbackNeedsWork }}
                 </button>
                 <span v-if="message.feedbackAt" class="feedback-meta muted">
-                  {{ message.feedbackHelpful === true ? 'Marked helpful' : 'Needs work' }}
+                  {{ message.feedbackHelpful === true ? uiCopy.feedbackMarkedHelpful : uiCopy.feedbackMarkedNeedsWork }}
                   <template v-if="message.feedbackNote">: {{ message.feedbackNote }}</template>
                 </span>
                 <span class="feedback-disclosure muted">
@@ -2404,7 +2448,7 @@ onBeforeUnmount(() => {
                   </div>
                   <article v-if="message.agentTrace.finalArticle" class="agent-final-article">
                     <div class="agent-final-head">
-                      <span class="agent-trace-title">Final Article</span>
+                      <span class="agent-trace-title">{{ uiCopy.finalArticle }}</span>
                       <span class="agent-trace-status completed">READY</span>
                     </div>
                     <div
@@ -2816,9 +2860,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-radius: var(--rag-radius-panel);
   background:
-    radial-gradient(circle at top left, rgba(224, 208, 180, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
-    rgba(9, 9, 9, 0.9);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+    rgba(9, 9, 9, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: none;
 }

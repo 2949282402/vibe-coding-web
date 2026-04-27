@@ -49,7 +49,7 @@ const logout = () => {
         </div>
       </div>
 
-      <nav class="menu">
+      <nav class="menu admin-surface">
         <router-link v-for="menu in menus" :key="menu.to" :to="menu.to">
           <span>{{ menu.label }}</span>
         </router-link>
@@ -71,10 +71,10 @@ const logout = () => {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 18px;
   min-height: 0;
   height: 100vh;
-  padding: 28px 24px;
+  padding: 24px 20px;
   color: var(--text-main);
   border-right: 1px solid var(--line);
   background: var(--admin-sidebar-bg);
@@ -85,7 +85,7 @@ const logout = () => {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 12px;
 }
 
 .sidebar-heading {
@@ -99,19 +99,20 @@ const logout = () => {
 .brand-block {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 }
 
 .brand-card {
-  padding: 20px;
+  padding: 18px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: var(--admin-soft-bg);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 var(--glow-soft);
 }
 
 .brand-card h2 {
   margin: 0;
-  font-size: 1.55rem;
+  font-size: 1.36rem;
   letter-spacing: -0.04em;
   text-transform: none;
 }
@@ -124,14 +125,15 @@ const logout = () => {
 .console-kicker {
   display: inline-flex;
   margin-bottom: 10px;
-  color: var(--text-secondary);
-  letter-spacing: 0.14em;
-  font-size: 0.76rem;
+  color: var(--text-muted);
+  letter-spacing: 0.18em;
+  font-size: 0.7rem;
+  text-transform: uppercase;
 }
 
 .console-title {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 2.6rem);
+  font-size: clamp(2rem, 4vw, 2.4rem);
   letter-spacing: -0.05em;
   text-transform: none;
   color: var(--text-main);
@@ -141,11 +143,13 @@ const logout = () => {
 .sidebar-footer {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .menu {
   flex: 1;
+  padding: 12px;
+  border-radius: 24px;
 }
 
 .menu a,
@@ -155,13 +159,13 @@ const logout = () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 50px;
-  padding: 13px 15px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
   color: var(--text-secondary);
-  background: var(--admin-soft-bg);
-  transition: 0.2s ease;
+  background: transparent;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .menu a:hover,
@@ -169,16 +173,20 @@ const logout = () => {
 .sidebar-footer button:hover,
 .menu .router-link-active {
   color: var(--text-main);
-  background: var(--admin-soft-hover);
+  background: rgba(255, 255, 255, 0.05);
   border-color: var(--line-strong);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 22px rgba(44, 28, 10, 0.08);
+  box-shadow: none;
+  transform: none;
 }
 
 button {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.admin-main {
+  background: var(--admin-shell-bg);
 }
 
 @media (max-width: 960px) {
