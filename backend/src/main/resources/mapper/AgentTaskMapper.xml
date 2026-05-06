@@ -17,6 +17,11 @@
         <result property="allowDraftWrite" column="allow_draft_write"/>
         <result property="currentStep" column="current_step"/>
         <result property="finalOutputSummary" column="final_output_summary"/>
+        <result property="reviewStatus" column="review_status"/>
+        <result property="draftPostId" column="draft_post_id"/>
+        <result property="reviewedBy" column="reviewed_by"/>
+        <result property="reviewedAt" column="reviewed_at"/>
+        <result property="rejectReason" column="reject_reason"/>
         <result property="errorMessage" column="error_message"/>
         <result property="startedAt" column="started_at"/>
         <result property="completedAt" column="completed_at"/>
@@ -46,7 +51,8 @@
     <select id="selectAll" resultMap="AgentTaskResultMap">
         SELECT
             id, user_id, session_id, task_type, title, goal, status, execution_mode,
-            search_scope, allow_draft_write, current_step, final_output_summary,
+            search_scope, allow_draft_write, current_step, final_output_summary, review_status,
+            draft_post_id, reviewed_by, reviewed_at, reject_reason,
             error_message, started_at, completed_at, created_at, updated_at
         FROM agent_task
         <where>
@@ -70,7 +76,8 @@
     <select id="selectById" resultMap="AgentTaskResultMap">
         SELECT
             id, user_id, session_id, task_type, title, goal, status, execution_mode,
-            search_scope, allow_draft_write, current_step, final_output_summary,
+            search_scope, allow_draft_write, current_step, final_output_summary, review_status,
+            draft_post_id, reviewed_by, reviewed_at, reject_reason,
             error_message, started_at, completed_at, created_at, updated_at
         FROM agent_task
         WHERE id = #{id}
@@ -79,7 +86,8 @@
     <select id="selectByIdAndUserId" resultMap="AgentTaskResultMap">
         SELECT
             id, user_id, session_id, task_type, title, goal, status, execution_mode,
-            search_scope, allow_draft_write, current_step, final_output_summary,
+            search_scope, allow_draft_write, current_step, final_output_summary, review_status,
+            draft_post_id, reviewed_by, reviewed_at, reject_reason,
             error_message, started_at, completed_at, created_at, updated_at
         FROM agent_task
         WHERE id = #{id}
@@ -87,14 +95,56 @@
         LIMIT 1
     </select>
 
+    <select id="countDrafts" resultType="long">
+        SELECT COUNT(1)
+        FROM agent_task
+        <where>
+            draft_post_id IS NOT NULL
+            <if test="reviewStatus != null and reviewStatus != ''">
+                AND review_status = #{reviewStatus}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    LOWER(COALESCE(title, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                    OR LOWER(COALESCE(goal, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                )
+            </if>
+        </where>
+    </select>
+
+    <select id="selectDrafts" resultMap="AgentTaskResultMap">
+        SELECT
+            id, user_id, session_id, task_type, title, goal, status, execution_mode,
+            search_scope, allow_draft_write, current_step, final_output_summary, review_status,
+            draft_post_id, reviewed_by, reviewed_at, reject_reason,
+            error_message, started_at, completed_at, created_at, updated_at
+        FROM agent_task
+        <where>
+            draft_post_id IS NOT NULL
+            <if test="reviewStatus != null and reviewStatus != ''">
+                AND review_status = #{reviewStatus}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    LOWER(COALESCE(title, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                    OR LOWER(COALESCE(goal, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                )
+            </if>
+        </where>
+        ORDER BY updated_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
     <insert id="insert" parameterType="com.hejulian.blog.agent.entity.AgentTask" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO agent_task (
             user_id, session_id, task_type, title, goal, status, execution_mode, search_scope,
-            allow_draft_write, current_step, final_output_summary, error_message, started_at, completed_at, created_at, updated_at
+            allow_draft_write, current_step, final_output_summary, review_status, draft_post_id,
+            reviewed_by, reviewed_at, reject_reason, error_message, started_at, completed_at, created_at, updated_at
         )
         VALUES (
             #{userId}, #{sessionId}, #{taskType}, #{title}, #{goal}, #{status}, #{executionMode},
-            #{searchScope}, #{allowDraftWrite}, #{currentStep}, #{finalOutputSummary}, #{errorMessage}, #{startedAt}, #{completedAt}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            #{searchScope}, #{allowDraftWrite}, #{currentStep}, #{finalOutputSummary}, #{reviewStatus}, #{draftPostId},
+            #{reviewedBy}, #{reviewedAt}, #{rejectReason}, #{errorMessage}, #{startedAt}, #{completedAt}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
     </insert>
 
@@ -111,6 +161,11 @@
             allow_draft_write = #{task.allowDraftWrite},
             current_step = #{task.currentStep},
             final_output_summary = #{task.finalOutputSummary},
+            review_status = #{task.reviewStatus},
+            draft_post_id = #{task.draftPostId},
+            reviewed_by = #{task.reviewedBy},
+            reviewed_at = #{task.reviewedAt},
+            reject_reason = #{task.rejectReason},
             error_message = #{task.errorMessage},
             started_at = #{task.startedAt},
             completed_at = #{task.completedAt},
@@ -126,6 +181,17 @@
             error_message = COALESCE(#{errorMessage}, error_message),
             started_at = COALESCE(#{startedAt}, started_at),
             completed_at = COALESCE(#{completedAt}, completed_at),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateReviewState">
+        UPDATE agent_task
+        SET review_status = #{reviewStatus},
+            draft_post_id = COALESCE(#{draftPostId}, draft_post_id),
+            reviewed_by = #{reviewedBy},
+            reviewed_at = #{reviewedAt},
+            reject_reason = #{rejectReason},
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>

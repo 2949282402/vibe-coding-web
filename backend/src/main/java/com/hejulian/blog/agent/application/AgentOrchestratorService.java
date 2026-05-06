@@ -47,6 +47,7 @@ public class AgentOrchestratorService {
     private static final int REVIEW_RESEARCH_BUDGET = 3000;
     private static final int REVIEW_DRAFT_BUDGET = 9000;
     private static final int PUBLISH_ARTICLE_BUDGET = 5000;
+    private static final String REVIEW_STATUS_DRAFT_READY = "DRAFT_READY";
 
     private final AgentTaskMapper taskMapper;
     private final AgentTaskStepMapper stepMapper;
@@ -123,12 +124,15 @@ public class AgentOrchestratorService {
             }
             int finalStep = 4;
 
+            Long draftPostId = null;
             if (Boolean.TRUE.equals(task.getAllowDraftWrite())) {
                 workingMemory.finalArticle = finalText;
                 if (stopIfCancelled(taskId, AgentRole.PUBLISHER)) {
                     return;
                 }
-                finalText = runPublisher(task, workingMemory);
+                PublishResult publishResult = runPublisher(task, workingMemory);
+                finalText = publishResult.summary();
+                draftPostId = publishResult.draftPostId();
                 finalStep = 5;
                 if (stopIfCancelled(taskId, AgentRole.PUBLISHER)) {
                     return;
@@ -144,10 +148,23 @@ public class AgentOrchestratorService {
                     task.getStartedAt(),
                     LocalDateTime.now()
             );
+            if (draftPostId != null) {
+                taskMapper.updateReviewState(taskId, REVIEW_STATUS_DRAFT_READY, draftPostId, null, null, null);
+            }
             memoryService.createOrReplaceTaskMemory(task.getUserId(), taskId, finalText, summarize(finalText, 180));
             persistAgentConversation(task, finalText);
-            evictPublicCaches();
-            traceService.recordEvent(taskId, null, AgentRole.REVIEWER, EventType.TASK_COMPLETED, "Task finished", "ok", null);
+            if (draftPostId == null) {
+                evictPublicCaches();
+            }
+            traceService.recordEvent(
+                    taskId,
+                    null,
+                    AgentRole.REVIEWER,
+                    EventType.TASK_COMPLETED,
+                    draftPostId == null ? "Task finished" : "Draft saved for admin review",
+                    "ok",
+                    null
+            );
         } catch (BusinessException ex) {
             taskMapper.updateStatus(
                     taskId,
@@ -331,7 +348,7 @@ public class AgentOrchestratorService {
         return draft;
     }
 
-    private String runPublisher(AgentTask task, AgentWorkingMemory workingMemory) {
+    private PublishResult runPublisher(AgentTask task, AgentWorkingMemory workingMemory) {
         AgentTaskStep step = startStep(task, 5, AgentRole.PUBLISHER, "publisher", "Publish post and save task note");
         String draft = workingMemory.finalArticle;
         ObjectNode args = OBJECT_MAPPER.createObjectNode();
@@ -359,14 +376,14 @@ public class AgentOrchestratorService {
                 metadata.summary(),
                 null,
                 draft,
-                "PUBLISHED",
+                "DRAFT",
                 false,
                 true,
                 metadata.tags()
         ));
-        String publishedSummary = draft + "\n\nPublished post: " + post.title() + " (/" + post.slug() + ")";
-        finishStep(step, "Published post #" + post.id() + " and saved task note");
-        return publishedSummary;
+        String publishedSummary = draft + "\n\nDraft saved for review: #" + post.id() + " (status: " + post.status() + ")";
+        finishStep(step, "Saved draft post #" + post.id() + " and task note");
+        return new PublishResult(publishedSummary, post.id());
     }
 
     private String buildPlan(String goal, String memorySummary, String memoryResult) {
@@ -698,6 +715,9 @@ public class AgentOrchestratorService {
 
         private AgentWorkingMemory(String goal) {
         }
+    }
+
+    private record PublishResult(String summary, Long draftPostId) {
     }
 
     private String stripMarkdown(String source) {

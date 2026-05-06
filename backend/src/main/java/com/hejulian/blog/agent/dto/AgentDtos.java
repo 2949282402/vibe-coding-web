@@ -61,6 +61,17 @@ public final class AgentDtos {
     ) {
     }
 
+    public record AgentDraftApproveRequest(
+            String editorNote
+    ) {
+    }
+
+    public record AgentDraftRejectRequest(
+            @NotBlank(message = "Reject reason is required") String reason,
+            String editorNote
+    ) {
+    }
+
     public record AgentMemoryUpdateRequest(
             @NotBlank(message = "Content is required")
             String content,
@@ -107,6 +118,11 @@ public final class AgentDtos {
             boolean allowDraftWrite,
             Integer currentStep,
             String finalOutputSummary,
+            String reviewStatus,
+            Long draftPostId,
+            Long reviewedBy,
+            LocalDateTime reviewedAt,
+            String rejectReason,
             String errorMessage,
             LocalDateTime startedAt,
             LocalDateTime completedAt,
@@ -231,6 +247,30 @@ public final class AgentDtos {
     ) {
     }
 
+    public record AgentDraftListResponse(
+            Long taskId,
+            String title,
+            String goal,
+            String status,
+            String reviewStatus,
+            Long draftPostId,
+            Integer currentStep,
+            LocalDateTime updatedAt,
+            String rejectReason
+    ) {
+    }
+
+    public record AgentDraftDetailResponse(
+            AgentTaskResponse task,
+            Long postId,
+            String draftTitle,
+            String draftSummary,
+            String draftContent,
+            String draftStatus,
+            LocalDateTime draftUpdatedAt
+    ) {
+    }
+
     public record AgentTraceItem(
             AgentTaskEventResponse event,
             AgentToolCallResponse toolCall,
@@ -263,6 +303,11 @@ public final class AgentDtos {
             Boolean allowDraftWrite,
             Integer currentStep,
             String finalOutputSummary,
+            String reviewStatus,
+            Long draftPostId,
+            Long reviewedBy,
+            LocalDateTime reviewedAt,
+            String rejectReason,
             String errorMessage,
             LocalDateTime startedAt,
             LocalDateTime completedAt,
@@ -282,6 +327,11 @@ public final class AgentDtos {
                 Boolean.TRUE.equals(allowDraftWrite),
                 currentStep,
                 finalOutputSummary,
+                reviewStatus,
+                draftPostId,
+                reviewedBy,
+                reviewedAt,
+                rejectReason,
                 errorMessage,
                 startedAt,
                 completedAt,

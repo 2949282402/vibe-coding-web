@@ -18,13 +18,17 @@ const authCopy = computed(() =>
         login: '登录',
         logout: '退出登录',
         admin: '后台',
-        profile: '当前用户'
+        profile: '当前用户',
+        issue: '内容现场',
+        desk: '个人知识与内容系统'
       }
     : {
         login: 'Sign In',
         logout: 'Sign Out',
         admin: 'Admin',
-        profile: 'Current User'
+        profile: 'Current User',
+        issue: 'Current Issue',
+        desk: 'Personal knowledge and publishing system'
       }
 );
 
@@ -61,38 +65,45 @@ function logout() {
 <template>
   <div class="page-shell" :class="{ 'page-shell-immersive': immersiveMode }">
     <header class="topbar glass-panel" :class="{ 'topbar-immersive': immersiveMode }">
-      <div class="brand-shell">
+      <div class="topbar-brand-layer">
         <router-link to="/" class="brand">
           <span class="mark">HJ</span>
-          <div>
-            <strong>HeJulian Blog</strong>
-            <p>{{ preferences.t('main.brandSubtitle') }}</p>
+          <div class="brand-copy">
+            <span class="topbar-label">{{ authCopy.issue }}</span>
+            <strong class="topbar-title">HeJulian Blog</strong>
+            <p class="topbar-subtitle">{{ authCopy.desk }}</p>
           </div>
         </router-link>
       </div>
 
-      <div class="topbar-actions">
-        <nav class="nav glass-subnav">
+      <div class="topbar-nav-layer">
+        <nav class="nav editorial-nav">
           <router-link
             v-for="item in navItems"
             :key="item.to"
             :to="item.to"
             :class="{ active: isNavActive(item) }"
           >
-            {{ item.label }}
+            <span>{{ item.label }}</span>
           </router-link>
         </nav>
 
-        <div v-if="authStore.isAuthenticated" class="user-rail glass-subnav">
-          <div class="user-meta">
-            <span class="user-label">{{ authCopy.profile }}</span>
-            <strong>{{ authStore.user?.displayName || authStore.user?.username }}</strong>
-          </div>
-          <button type="button" class="auth-btn" @click="logout">{{ authCopy.logout }}</button>
-        </div>
-        <button v-else type="button" class="auth-btn glass-subnav" @click="goLogin">{{ authCopy.login }}</button>
+        <div class="topbar-actions">
+          <div class="topbar-utility">
+            <div v-if="authStore.isAuthenticated" class="user-rail">
+              <div class="user-meta">
+                <span class="user-label">{{ authCopy.profile }}</span>
+                <strong>{{ authStore.user?.displayName || authStore.user?.username }}</strong>
+              </div>
+              <button type="button" class="auth-btn auth-btn-secondary" @click="logout">{{ authCopy.logout }}</button>
+            </div>
+            <button v-else type="button" class="auth-btn auth-btn-primary" @click="goLogin">{{ authCopy.login }}</button>
 
-        <AppControls />
+            <div class="controls-wrap">
+              <AppControls />
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -111,27 +122,39 @@ function logout() {
 .page-shell-immersive {
   min-height: 100vh;
   height: 100vh;
-  padding: 12px 12px 16px;
+  padding: 6px 12px 16px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .topbar {
-  position: relative;
+  position: sticky;
+  top: 14px;
   z-index: 12;
-  margin-bottom: 28px;
-  padding: 14px 18px;
-  border-radius: var(--radius-xl);
+  margin-bottom: 20px;
+  padding: 18px 22px 16px;
+  border-radius: 28px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
   gap: 18px;
-  background: rgba(18, 19, 22, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+    linear-gradient(180deg, rgba(16, 16, 16, 0.76), rgba(16, 16, 16, 0.48)),
+    rgba(13, 17, 24, 0.56);
+  backdrop-filter: blur(30px) saturate(140%);
+  -webkit-backdrop-filter: blur(30px) saturate(140%);
+  box-shadow: var(--glass-edge), 0 24px 54px rgba(0, 0, 0, 0.24);
+  animation: topbar-float-in 0.72s var(--ease-soft);
+  transition: transform 0.34s var(--ease-liquid), box-shadow 0.34s var(--ease-liquid), background 0.34s var(--ease-soft);
 }
 
 html[data-theme='light'] .topbar {
-  background: rgba(255, 255, 255, 0.9);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.26)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 243, 243, 0.8)),
+    rgba(255, 255, 255, 0.48);
 }
 
 .topbar::after {
@@ -140,7 +163,10 @@ html[data-theme='light'] .topbar {
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 22%),
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.08), transparent 22%);
 }
 
 html[data-theme='light'] .topbar::after {
@@ -149,30 +175,55 @@ html[data-theme='light'] .topbar::after {
 
 .topbar-immersive {
   position: relative;
-  z-index: 12;
+  top: auto;
   margin-bottom: 12px;
   border-radius: 20px;
-  backdrop-filter: blur(14px);
 }
 
-.brand-shell {
+.topbar-brand-layer,
+.topbar-nav-layer,
+.brand,
+.topbar-utility {
+  position: relative;
+  z-index: 2;
+}
+
+.topbar-brand-layer,
+.topbar-nav-layer {
   min-width: 0;
 }
 
 .brand {
-  position: relative;
-  z-index: 2;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   min-width: 0;
 }
 
-.brand strong {
-  display: block;
-  font-size: 0.98rem;
-  letter-spacing: 0.12em;
+.brand-copy {
+  display: grid;
+  gap: 0;
+}
+
+.topbar-label,
+.user-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+.topbar-label {
+  margin-bottom: 6px;
+}
+
+.topbar-title {
+  display: block;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.28rem;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
 }
 
 .brand p,
@@ -180,23 +231,26 @@ html[data-theme='light'] .topbar::after {
   margin: 0;
 }
 
-.brand p {
+.topbar-subtitle {
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-top: 6px;
+  max-width: 640px;
 }
 
 .mark {
-  width: 48px;
-  height: 48px;
-  border-radius: 15px;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
   display: grid;
   place-items: center;
   font-weight: 800;
   letter-spacing: 0.16em;
   color: #0d0d0f;
-  background: linear-gradient(180deg, #f5f5f6, #d8d8dd);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(170, 173, 180, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 14px 28px rgba(0, 0, 0, 0.2);
 }
 
 html[data-theme='light'] .mark {
@@ -206,59 +260,105 @@ html[data-theme='light'] .mark {
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
 }
 
-.topbar-actions {
-  position: relative;
-  z-index: 2;
+.topbar-nav-layer {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.editorial-nav {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
+  justify-content: flex-start;
   flex-wrap: wrap;
-}
-
-.glass-subnav {
+  gap: 8px;
   padding: 5px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.025);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--glass-edge), 0 10px 24px rgba(0, 0, 0, 0.08);
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
-html[data-theme='light'] .glass-subnav {
-  background: rgba(17, 17, 17, 0.03);
+html[data-theme='light'] .editorial-nav {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 243, 243, 0.8)),
+    rgba(17, 17, 17, 0.03);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
-.nav {
-  position: relative;
-  z-index: 3;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .nav a {
-  position: relative;
-  z-index: 3;
-  padding: 10px 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0);
   color: var(--text-secondary);
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: background-color 0.28s var(--ease-soft), color 0.28s var(--ease-soft), border-color 0.28s var(--ease-soft), transform 0.28s var(--ease-liquid), box-shadow 0.28s var(--ease-liquid);
 }
 
 .nav a:hover,
 .nav a.active {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--line-strong);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05)),
+    rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+  box-shadow: var(--glass-edge), 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.topbar-actions,
+.topbar-utility {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.topbar-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.topbar-utility {
+  gap: 12px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  padding-left: 2px;
 }
 
 .user-rail {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  padding-inline: 12px;
+  min-height: 42px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--glass-edge), 0 10px 24px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme='light'] .user-rail {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 243, 243, 0.8)),
+    rgba(17, 17, 17, 0.03);
 }
 
 .user-meta {
@@ -267,31 +367,50 @@ html[data-theme='light'] .glass-subnav {
   gap: 2px;
 }
 
-.user-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .auth-btn {
   border: 0;
-  color: var(--text-main);
-  background: transparent;
   cursor: pointer;
-  min-height: 42px;
-  padding: 0 16px;
+  min-height: 32px;
+  padding: 0 12px;
   border-radius: 999px;
   font: inherit;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: transform 0.28s var(--ease-liquid), background-color 0.28s var(--ease-soft), color 0.28s var(--ease-soft), box-shadow 0.28s var(--ease-liquid), border-color 0.28s var(--ease-soft);
 }
 
 .auth-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+}
+
+.auth-btn-primary {
+  color: #171412;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(191, 191, 191, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+}
+
+html[data-theme='light'] .auth-btn-primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(29, 29, 31, 0.95), rgba(68, 68, 74, 0.94));
+  border-color: rgba(20, 20, 20, 0.14);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+.auth-btn-secondary {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.controls-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .footer {
-  padding: 30px 4px 0;
+  padding: 36px 8px 0;
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -307,33 +426,63 @@ html[data-theme='light'] .glass-subnav {
   overflow: hidden;
 }
 
+@keyframes topbar-float-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.985);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (max-width: 960px) {
   .topbar {
     grid-template-columns: 1fr;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
-  .topbar-actions {
-    width: 100%;
-    justify-content: space-between;
+  .topbar-nav-layer {
+    display: grid;
+    gap: 14px;
+    justify-content: stretch;
   }
 
-  .glass-subnav {
-    width: 100%;
-    border-radius: 24px;
+  .topbar-actions,
+  .editorial-nav {
+    justify-content: flex-start;
+  }
+
+  .topbar-utility {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 
 @media (max-width: 720px) {
   .page-shell-immersive {
-    padding: 8px;
+    padding: 4px 8px 8px;
   }
 
   .topbar-immersive {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
-  .topbar-actions,
+  .topbar {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .editorial-nav,
+  .user-rail,
+  .topbar-utility,
+  .footer {
+    border-radius: 22px;
+  }
+
+  .topbar-utility,
   .footer,
   .user-rail {
     flex-direction: column;
@@ -341,16 +490,61 @@ html[data-theme='light'] .glass-subnav {
   }
 
   .brand,
-  .glass-subnav,
-  .nav {
+  .editorial-nav,
+  .user-rail,
+  .controls-wrap {
     width: 100%;
   }
 
-  .nav a,
-  .auth-btn {
-    flex: 1 1 calc(50% - 8px);
-    justify-content: center;
+  .brand {
+    gap: 12px;
+  }
+
+  .mark {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+  }
+
+  .brand strong {
+    font-size: 1.12rem;
+  }
+
+  .topbar-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .editorial-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 4px;
+    gap: 6px;
+    scrollbar-width: none;
+  }
+
+  .editorial-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav a {
+    width: auto;
+    min-width: 88px;
+    padding: 0 14px;
     text-align: center;
+    flex: 0 0 auto;
+  }
+
+  .auth-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .controls-wrap {
+    justify-content: flex-start;
+  }
+
+  .controls-wrap :deep(.app-controls) {
+    width: 100%;
   }
 }
 </style>

@@ -18,7 +18,7 @@ export const deleteCategoryApi = (id) => http.delete(`/admin/categories/${id}`);
 
 export const fetchTagsApi = () => http.get('/admin/tags');
 export const saveTagApi = (payload) =>
-  payload.id ? http.put(`/admin/tags/${payload.id}`, payload) : http.post('/admin/tags', payload);
+  payload.id ? http.put(`/admin/tags/${payload.id}`, payload) : http.post(`/admin/tags`, payload);
 export const deleteTagApi = (id) => http.delete(`/admin/tags/${id}`);
 
 export const fetchAdminCommentsApi = () => http.get('/admin/comments');
@@ -29,3 +29,7 @@ export const exportAdminRagFeedbackCsvApi = (params) =>
 export const fetchAdminAgentTasksApi = (params) => http.get('/admin/agent/tasks', { params });
 export const fetchAdminAgentTaskTraceApi = (taskId, params) => http.get(`/admin/agent/tasks/${taskId}/trace`, { params });
 export const fetchAdminAgentToolCallsApi = (params) => http.get('/admin/agent/tool-calls', { params });
+export const fetchAdminAgentDraftsApi = (params) => http.get('/admin/agent/drafts', { params });
+export const fetchAdminAgentDraftApi = (taskId) => http.get(`/admin/agent/drafts/${taskId}`);
+export const approveAdminAgentDraftApi = (taskId, payload = {}) => http.post(`/admin/agent/drafts/${taskId}/approve`, payload);
+export const rejectAdminAgentDraftApi = (taskId, payload) => http.post(`/admin/agent/drafts/${taskId}/reject`, payload);

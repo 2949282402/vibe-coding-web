@@ -155,7 +155,8 @@ public class AdminBlogService {
                 post.isFeatured(),
                 post.isAllowComment(),
                 post.getCategoryName(),
-                tagNames
+                tagNames,
+                post.getUpdatedAt()
         );
     }
 
@@ -196,6 +197,25 @@ public class AdminBlogService {
         }
         ragIndexingApplicationService.syncPost(post);
         return getPost(post.getId());
+    }
+
+    @Transactional
+    @CacheEvict(value = {CacheNames.SITE_HOME, CacheNames.PUBLIC_POST_LIST}, allEntries = true)
+    public AdminDtos.AdminPostDetailResponse publishPost(Long id) {
+        Post post = postMapper.selectById(id);
+        if (post == null) {
+            throw new BusinessException("Post not found");
+        }
+        if (post.getStatus() == PostStatus.PUBLISHED) {
+            return getPost(id);
+        }
+        post.setStatus(PostStatus.PUBLISHED);
+        if (post.getPublishedAt() == null) {
+            post.setPublishedAt(LocalDateTime.now());
+        }
+        postMapper.update(post);
+        ragIndexingApplicationService.syncPost(post);
+        return getPost(id);
     }
 
     @Transactional

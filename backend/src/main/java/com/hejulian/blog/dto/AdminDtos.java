@@ -94,7 +94,8 @@ public final class AdminDtos {
             boolean featured,
             boolean allowComment,
             String categoryName,
-            List<String> tags
+            List<String> tags,
+            LocalDateTime updatedAt
     ) {
     }
 

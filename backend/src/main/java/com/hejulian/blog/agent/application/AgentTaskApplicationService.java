@@ -27,6 +27,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Service
 public class AgentTaskApplicationService {
 
+    private static final String REVIEW_STATUS_DRAFT_READY = "DRAFT_READY";
+
     private final AgentTaskMapper taskMapper;
     private final AgentTaskStepMapper stepMapper;
     private final AgentTaskEventMapper eventMapper;
@@ -68,6 +70,11 @@ public class AgentTaskApplicationService {
         task.setSearchScope(request.searchScope() == null ? SearchScope.LOCAL_ONLY : request.searchScope());
         task.setAllowDraftWrite(Boolean.TRUE.equals(request.allowDraftWrite()));
         task.setCurrentStep(0);
+        task.setReviewStatus(null);
+        task.setDraftPostId(null);
+        task.setReviewedBy(null);
+        task.setReviewedAt(null);
+        task.setRejectReason(null);
         taskMapper.insert(task);
 
         Long taskId = task.getId();
@@ -134,6 +141,7 @@ public class AgentTaskApplicationService {
             throw new BusinessException("Task not found");
         }
         taskMapper.updateStatus(taskId, TaskStatus.PENDING, task.getCurrentStep(), "", "", LocalDateTime.now(), null);
+        taskMapper.updateReviewState(taskId, null, null, null, null, null);
         CompletableFuture.runAsync(() -> orchestratorService.retryTask(taskId, reason));
         AgentTask queued = taskMapper.selectById(taskId);
         return toTaskResponse(queued == null ? task : queued);
@@ -178,6 +186,9 @@ public class AgentTaskApplicationService {
 
         taskMapper.updateStatus(taskId, null, task.getCurrentStep(), content, task.getErrorMessage(),
                 task.getStartedAt(), task.getCompletedAt());
+        if (TaskStatus.COMPLETED.equals(task.getStatus()) && task.getDraftPostId() != null) {
+            taskMapper.updateReviewState(taskId, REVIEW_STATUS_DRAFT_READY, task.getDraftPostId(), null, null, null);
+        }
         task = taskMapper.selectById(taskId);
         return toTaskResponse(task);
     }
@@ -304,6 +315,9 @@ public class AgentTaskApplicationService {
             return "Agent task queued. Preparing the workflow...";
         }
         if (TaskStatus.COMPLETED.equals(status)) {
+            if (REVIEW_STATUS_DRAFT_READY.equals(task.getReviewStatus())) {
+                return "Agent task completed. Draft is ready for admin review.";
+            }
             return "Agent task completed. Preparing the final answer...";
         }
         if (TaskStatus.FAILED.equals(status)) {
@@ -323,7 +337,7 @@ public class AgentTaskApplicationService {
             };
             case 3 -> "Writer agent is composing the article draft...";
             case 4 -> "Reviewer agent is checking the draft quality...";
-            case 5 -> "Publisher agent is saving and publishing the article...";
+            case 5 -> "Publisher agent is saving the article as a review draft...";
             default -> "Agent is starting up and coordinating the next step...";
         };
     }
@@ -348,6 +362,11 @@ public class AgentTaskApplicationService {
                 task.getAllowDraftWrite(),
                 task.getCurrentStep(),
                 task.getFinalOutputSummary(),
+                task.getReviewStatus(),
+                task.getDraftPostId(),
+                task.getReviewedBy(),
+                task.getReviewedAt(),
+                task.getRejectReason(),
                 task.getErrorMessage(),
                 task.getStartedAt(),
                 task.getCompletedAt(),

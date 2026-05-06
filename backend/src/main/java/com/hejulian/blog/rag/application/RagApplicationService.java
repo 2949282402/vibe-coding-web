@@ -54,6 +54,10 @@ public class RagApplicationService {
     private static final String SEARCH_MODE_LOCAL_AND_WEB = "LOCAL_AND_WEB";
     private static final String SOURCE_TYPE_BLOG = "blog";
     private static final String SOURCE_TYPE_WEB = "web";
+    private static final String RESPONSE_SOURCE_TYPE_LOCAL = "local";
+    private static final String RESPONSE_SOURCE_TYPE_WEB = "web";
+    private static final String RESPONSE_SOURCE_TYPE_MIXED = "mixed";
+    private static final String RESPONSE_SOURCE_TYPE_NONE = "none";
     private final RagProperties ragProperties;
     private final RagIndexingApplicationService indexingService;
     private final KnowledgeBaseRepository knowledgeBaseRepository;
@@ -68,6 +72,7 @@ public class RagApplicationService {
     private final CacheManager cacheManager;
 
     public RagDtos.AskResponse askQuestion(Long userId, RagDtos.AskRequest request) {
+        long startedAt = System.nanoTime();
         if (isAskMode(request.answerMode())) {
             return askModelOnly(userId, request);
         }
@@ -89,7 +94,9 @@ public class RagApplicationService {
                     context.prebuiltResponse().followUpQuestions(),
                     context.prebuiltResponse().sources(),
                     history,
-                    context.prebuiltResponse().strictCitation()
+                    context.prebuiltResponse().strictCitation(),
+                    false,
+                    elapsedMillis(startedAt)
             );
         }
 
@@ -113,7 +120,9 @@ public class RagApplicationService {
                         resolution.followUpQuestions(),
                         resolution.sources(),
                         history,
-                        resolution.strictCitation()
+                        resolution.strictCitation(),
+                        true,
+                        elapsedMillis(startedAt)
                 );
             }
         }
@@ -143,7 +152,7 @@ public class RagApplicationService {
                 citations,
                 context.sources()
         );
-        return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true);
+        return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true, false, elapsedMillis(startedAt));
     }
 
     public SseEmitter streamQuestion(Long userId, RagDtos.AskRequest request) {
@@ -278,6 +287,7 @@ public class RagApplicationService {
     }
 
     public RagDtos.AskResponse replayConversation(Long userId, RagDtos.ReplayRequest request) {
+        long startedAt = System.nanoTime();
         String sessionId = normalizeSessionId(request.sessionId());
         ensureSessionExists(userId, sessionId);
 
@@ -313,7 +323,9 @@ public class RagApplicationService {
                     context.prebuiltResponse().followUpQuestions(),
                     context.prebuiltResponse().sources(),
                     history,
-                    context.prebuiltResponse().strictCitation()
+                    context.prebuiltResponse().strictCitation(),
+                    false,
+                    elapsedMillis(startedAt)
             );
         }
 
@@ -339,7 +351,9 @@ public class RagApplicationService {
                         resolution.followUpQuestions(),
                         resolution.sources(),
                         history,
-                        resolution.strictCitation()
+                        resolution.strictCitation(),
+                        true,
+                        elapsedMillis(startedAt)
                 );
             }
         }
@@ -371,10 +385,11 @@ public class RagApplicationService {
                 context.sources(),
                 fullHistory
         );
-        return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true);
+        return buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true, false, elapsedMillis(startedAt));
     }
 
     private void streamQuestionInternal(Long userId, RagDtos.AskRequest request, SseEmitter emitter) {
+        long startedAt = System.nanoTime();
         if (isAskMode(request.answerMode())) {
             streamModelOnly(userId, request, emitter);
             return;
@@ -401,7 +416,9 @@ public class RagApplicationService {
                             context.prebuiltResponse().followUpQuestions(),
                             context.prebuiltResponse().sources(),
                             history,
-                            context.prebuiltResponse().strictCitation()
+                            context.prebuiltResponse().strictCitation(),
+                            false,
+                            elapsedMillis(startedAt)
                     ),
                     null
             );
@@ -414,7 +431,7 @@ public class RagApplicationService {
                     emitter,
                     "meta",
                     null,
-                    buildAnswerResponse(context, "", "llm", context.followUpQuestions(), context.sources(), context.history(), false),
+                    buildAnswerResponse(context, "", "llm", context.followUpQuestions(), context.sources(), context.history(), false, false, 0L),
                     null
             );
 
@@ -441,7 +458,9 @@ public class RagApplicationService {
                                 resolution.followUpQuestions(),
                                 resolution.sources(),
                                 history,
-                                resolution.strictCitation()
+                                resolution.strictCitation(),
+                                true,
+                                elapsedMillis(startedAt)
                         ),
                         null
                 );
@@ -461,7 +480,9 @@ public class RagApplicationService {
                         context.followUpQuestions(),
                         context.sources(),
                         context.history(),
-                        true
+                        true,
+                        false,
+                        0L
                 ),
                 null
         );
@@ -496,7 +517,7 @@ public class RagApplicationService {
                 emitter,
                 "done",
                 null,
-                buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true),
+                buildAnswerResponse(context, answer, mode, context.followUpQuestions(), context.sources(), history, true, false, elapsedMillis(startedAt)),
                 null
         );
         emitter.complete();
@@ -512,6 +533,7 @@ public class RagApplicationService {
     }
 
     private RagDtos.AskResponse askModelOnly(Long userId, RagDtos.AskRequest request) {
+        long startedAt = System.nanoTime();
         String sessionId = normalizeSessionId(request.sessionId());
         String question = request.question().trim();
         IndexState indexState = indexingService.ensureIndexReady();
@@ -535,11 +557,13 @@ public class RagApplicationService {
                 answer,
                 normalizeSearchMode(request.searchMode()),
                 indexState,
-                history
+                history,
+                elapsedMillis(startedAt)
         );
     }
 
     private void streamModelOnly(Long userId, RagDtos.AskRequest request, SseEmitter emitter) {
+        long startedAt = System.nanoTime();
         String sessionId = normalizeSessionId(request.sessionId());
         String question = request.question().trim();
         String searchMode = normalizeSearchMode(request.searchMode());
@@ -553,7 +577,7 @@ public class RagApplicationService {
                 emitter,
                 "meta",
                 null,
-                buildModelOnlyResponse(sessionId, question, "", searchMode, indexState, history),
+                buildModelOnlyResponse(sessionId, question, "", searchMode, indexState, history, 0L),
                 null
         );
 
@@ -575,7 +599,7 @@ public class RagApplicationService {
                 emitter,
                 "done",
                 null,
-                buildModelOnlyResponse(sessionId, question, answer, searchMode, indexState, persistedHistory),
+                buildModelOnlyResponse(sessionId, question, answer, searchMode, indexState, persistedHistory, elapsedMillis(startedAt)),
                 null
         );
         emitter.complete();
@@ -609,7 +633,13 @@ public class RagApplicationService {
                     List.of(),
                     history,
                     true,
-                    searchMode
+                    searchMode,
+                    RESPONSE_SOURCE_TYPE_NONE,
+                    0,
+                    false,
+                    0L,
+                    "low",
+                    null
             );
             return new AnswerContext(
                     sessionId,
@@ -647,7 +677,13 @@ public class RagApplicationService {
                     List.of(),
                     history,
                     true,
-                    searchMode
+                    searchMode,
+                    RESPONSE_SOURCE_TYPE_NONE,
+                    0,
+                    false,
+                    0L,
+                    "low",
+                    null
             );
             return new AnswerContext(
                     sessionId,
@@ -1053,8 +1089,11 @@ public class RagApplicationService {
             List<String> followUpQuestions,
             List<RagDtos.Source> sources,
             List<RagDtos.ChatMessage> history,
-            boolean strictCitation
+            boolean strictCitation,
+            boolean usedWebSearch,
+            long latencyMs
     ) {
+        AnswerMetadata metadata = buildAnswerMetadata(context, sources, strictCitation, usedWebSearch);
         return new RagDtos.AskResponse(
                 context.sessionId(),
                 context.question(),
@@ -1067,7 +1106,13 @@ public class RagApplicationService {
                 sources,
                 history,
                 strictCitation,
-                context.searchMode()
+                context.searchMode(),
+                metadata.sourceType(),
+                metadata.retrievalHitCount(),
+                usedWebSearch,
+                latencyMs,
+                metadata.confidenceLevel(),
+                metadata.knowledgeUpdatedAt()
         );
     }
 
@@ -1077,7 +1122,8 @@ public class RagApplicationService {
             String answer,
             String searchMode,
             IndexState indexState,
-            List<RagDtos.ChatMessage> history
+            List<RagDtos.ChatMessage> history,
+            long latencyMs
     ) {
         return new RagDtos.AskResponse(
                 sessionId,
@@ -1091,8 +1137,101 @@ public class RagApplicationService {
                 List.of(),
                 history,
                 false,
-                searchMode
+                searchMode,
+                RESPONSE_SOURCE_TYPE_NONE,
+                0,
+                false,
+                latencyMs,
+                "low",
+                null
         );
+    }
+
+    private AnswerMetadata buildAnswerMetadata(
+            AnswerContext context,
+            List<RagDtos.Source> sources,
+            boolean strictCitation,
+            boolean usedWebSearch
+    ) {
+        int retrievalHitCount = countLocalSources(sources);
+        boolean hasLocalSources = retrievalHitCount > 0;
+        boolean hasWebSources = hasWebSources(sources);
+        String sourceType = resolveSourceType(hasLocalSources, hasWebSources);
+        String confidenceLevel = resolveConfidenceLevel(sourceType, retrievalHitCount, strictCitation, usedWebSearch);
+        return new AnswerMetadata(
+                sourceType,
+                retrievalHitCount,
+                confidenceLevel,
+                resolveKnowledgeUpdatedAt(context)
+        );
+    }
+
+    private int countLocalSources(List<RagDtos.Source> sources) {
+        return (int) sources.stream()
+                .filter(source -> SOURCE_TYPE_BLOG.equals(source.sourceType()))
+                .count();
+    }
+
+    private boolean hasWebSources(List<RagDtos.Source> sources) {
+        return sources.stream().anyMatch(source -> SOURCE_TYPE_WEB.equals(source.sourceType()));
+    }
+
+    private String resolveSourceType(boolean hasLocalSources, boolean hasWebSources) {
+        if (hasLocalSources && hasWebSources) {
+            return RESPONSE_SOURCE_TYPE_MIXED;
+        }
+        if (hasLocalSources) {
+            return RESPONSE_SOURCE_TYPE_LOCAL;
+        }
+        if (hasWebSources) {
+            return RESPONSE_SOURCE_TYPE_WEB;
+        }
+        return RESPONSE_SOURCE_TYPE_NONE;
+    }
+
+    private String resolveConfidenceLevel(
+            String sourceType,
+            int retrievalHitCount,
+            boolean strictCitation,
+            boolean usedWebSearch
+    ) {
+        if (RESPONSE_SOURCE_TYPE_NONE.equals(sourceType)) {
+            return "low";
+        }
+        if (RESPONSE_SOURCE_TYPE_WEB.equals(sourceType)) {
+            return "low";
+        }
+        if (RESPONSE_SOURCE_TYPE_MIXED.equals(sourceType)) {
+            return strictCitation && retrievalHitCount >= 2 ? "medium" : "low";
+        }
+        if (strictCitation && retrievalHitCount >= 2 && !usedWebSearch) {
+            return "high";
+        }
+        if (retrievalHitCount >= 1) {
+            return "medium";
+        }
+        return "low";
+    }
+
+    private LocalDateTime resolveKnowledgeUpdatedAt(AnswerContext context) {
+        return context.rankedChunks().stream()
+                .map(ScoredChunk::chunk)
+                .map(KnowledgeChunk::publishedAt)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
+    }
+
+    private record AnswerMetadata(
+            String sourceType,
+            int retrievalHitCount,
+            String confidenceLevel,
+            @Nullable LocalDateTime knowledgeUpdatedAt
+    ) {
     }
 
     private String generateModelOnlyAnswer(

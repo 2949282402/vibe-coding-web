@@ -15,13 +15,20 @@ import com.hejulian.blog.agent.mapper.AgentTaskMapper;
 import com.hejulian.blog.agent.mapper.AgentTaskStepMapper;
 import com.hejulian.blog.agent.mapper.AgentToolCallMapper;
 import com.hejulian.blog.common.PageResponse;
+import com.hejulian.blog.dto.AdminDtos;
 import com.hejulian.blog.exception.BusinessException;
+import com.hejulian.blog.service.AdminBlogService;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AgentAdminService {
+
+    private static final String REVIEW_STATUS_DRAFT_READY = "DRAFT_READY";
+    private static final String REVIEW_STATUS_REJECTED = "REVIEW_REJECTED";
+    private static final String REVIEW_STATUS_PUBLISHED = "PUBLISHED";
 
     private final AgentTaskMapper taskMapper;
     private final AgentTaskStepMapper stepMapper;
@@ -30,6 +37,7 @@ public class AgentAdminService {
     private final AgentMemoryHitMapper memoryHitMapper;
     private final AgentMemoryMapper memoryMapper;
     private final AgentEvalRecordMapper evalRecordMapper;
+    private final AdminBlogService adminBlogService;
 
     public AgentAdminService(
             AgentTaskMapper taskMapper,
@@ -38,7 +46,8 @@ public class AgentAdminService {
             AgentToolCallMapper toolCallMapper,
             AgentMemoryHitMapper memoryHitMapper,
             AgentMemoryMapper memoryMapper,
-            AgentEvalRecordMapper evalRecordMapper
+            AgentEvalRecordMapper evalRecordMapper,
+            AdminBlogService adminBlogService
     ) {
         this.taskMapper = taskMapper;
         this.stepMapper = stepMapper;
@@ -47,6 +56,7 @@ public class AgentAdminService {
         this.memoryHitMapper = memoryHitMapper;
         this.memoryMapper = memoryMapper;
         this.evalRecordMapper = evalRecordMapper;
+        this.adminBlogService = adminBlogService;
     }
 
     @Transactional(readOnly = true)
@@ -79,6 +89,97 @@ public class AgentAdminService {
                 .toList();
 
         return buildPageResponse(records, normalizedPage + 1, normalizedPageSize, total);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<AgentDtos.AgentDraftListResponse> listDrafts(String reviewStatus, String keyword, int page, int pageSize) {
+        int normalizedPage = normalizePage(page);
+        int normalizedPageSize = normalizePageSize(pageSize);
+        String normalizedReviewStatus = sanitizeReviewStatus(reviewStatus);
+        String normalizedKeyword = sanitizeKeyword(keyword);
+
+        long total = taskMapper.countDrafts(normalizedReviewStatus, normalizedKeyword);
+        List<AgentDtos.AgentDraftListResponse> records = taskMapper.selectDrafts(
+                        normalizedReviewStatus,
+                        normalizedKeyword,
+                        normalizedPage * normalizedPageSize,
+                        normalizedPageSize
+                ).stream()
+                .map(task -> new AgentDtos.AgentDraftListResponse(
+                        task.getId(),
+                        task.getTitle(),
+                        task.getGoal(),
+                        task.getStatus() == null ? null : task.getStatus().name(),
+                        task.getReviewStatus(),
+                        task.getDraftPostId(),
+                        task.getCurrentStep(),
+                        task.getUpdatedAt(),
+                        task.getRejectReason()
+                ))
+                .toList();
+
+        return buildPageResponse(records, normalizedPage + 1, normalizedPageSize, total);
+    }
+
+    @Transactional(readOnly = true)
+    public AgentDtos.AgentDraftDetailResponse getDraftDetail(Long taskId) {
+        AgentTask task = taskMapper.selectById(taskId);
+        if (task == null || task.getDraftPostId() == null) {
+            throw new BusinessException("Draft task not found");
+        }
+        AdminDtos.AdminPostDetailResponse post = adminBlogService.getPost(task.getDraftPostId());
+        return new AgentDtos.AgentDraftDetailResponse(
+                toTaskResponse(task),
+                post.id(),
+                post.title(),
+                post.summary(),
+                post.content(),
+                post.status(),
+                post.updatedAt()
+        );
+    }
+
+    @Transactional
+    public AgentDtos.AgentTaskResponse approveDraft(Long taskId, Long adminUserId, AgentDtos.AgentDraftApproveRequest request) {
+        AgentTask task = taskMapper.selectById(taskId);
+        if (task == null || task.getDraftPostId() == null) {
+            throw new BusinessException("Draft task not found");
+        }
+        if (REVIEW_STATUS_PUBLISHED.equals(task.getReviewStatus())) {
+            return toTaskResponse(task);
+        }
+
+        AdminDtos.AdminPostDetailResponse post = adminBlogService.publishPost(task.getDraftPostId());
+        LocalDateTime reviewedAt = LocalDateTime.now();
+        taskMapper.updateReviewState(taskId, REVIEW_STATUS_PUBLISHED, task.getDraftPostId(), adminUserId, reviewedAt, null);
+
+        String finalSummary = task.getFinalOutputSummary() == null ? "" : task.getFinalOutputSummary().trim();
+        String publishSuffix = "Published post: " + post.title() + " (/" + post.slug() + ")";
+        String nextSummary = finalSummary.contains(publishSuffix)
+                ? finalSummary
+                : (finalSummary.isEmpty() ? publishSuffix : finalSummary + "\n\n" + publishSuffix);
+        taskMapper.updateStatus(taskId, null, task.getCurrentStep(), nextSummary, task.getErrorMessage(), task.getStartedAt(), task.getCompletedAt());
+
+        AgentTask updated = taskMapper.selectById(taskId);
+        return toTaskResponse(updated == null ? task : updated);
+    }
+
+    @Transactional
+    public AgentDtos.AgentTaskResponse rejectDraft(Long taskId, Long adminUserId, AgentDtos.AgentDraftRejectRequest request) {
+        AgentTask task = taskMapper.selectById(taskId);
+        if (task == null || task.getDraftPostId() == null) {
+            throw new BusinessException("Draft task not found");
+        }
+        taskMapper.updateReviewState(
+                taskId,
+                REVIEW_STATUS_REJECTED,
+                task.getDraftPostId(),
+                adminUserId,
+                LocalDateTime.now(),
+                request.reason().trim()
+        );
+        AgentTask updated = taskMapper.selectById(taskId);
+        return toTaskResponse(updated == null ? task : updated);
     }
 
     @Transactional(readOnly = true)
@@ -189,6 +290,11 @@ public class AgentAdminService {
                 Boolean.TRUE.equals(task.getAllowDraftWrite()),
                 task.getCurrentStep(),
                 task.getFinalOutputSummary(),
+                task.getReviewStatus(),
+                task.getDraftPostId(),
+                task.getReviewedBy(),
+                task.getReviewedAt(),
+                task.getRejectReason(),
                 task.getErrorMessage(),
                 task.getStartedAt(),
                 task.getCompletedAt(),
@@ -272,6 +378,17 @@ public class AgentAdminService {
         } catch (IllegalArgumentException ex) {
             throw new BusinessException("Unsupported task status: " + status);
         }
+    }
+
+    private String sanitizeReviewStatus(String reviewStatus) {
+        if (reviewStatus == null || reviewStatus.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = reviewStatus.trim().toUpperCase();
+        return switch (normalized) {
+            case REVIEW_STATUS_DRAFT_READY, REVIEW_STATUS_REJECTED, REVIEW_STATUS_PUBLISHED -> normalized;
+            default -> throw new BusinessException("Unsupported review status: " + reviewStatus);
+        };
     }
 
     private <T> PageResponse<T> buildPageResponse(List<T> records, int page, int pageSize, long total) {

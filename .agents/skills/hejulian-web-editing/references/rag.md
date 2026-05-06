@@ -1,94 +1,95 @@
-# RAG, Ask, and `/knowledge` Reference
+# RAG、Ask 与 `/knowledge` 参考
 
-Use for `/knowledge`, RAG retrieval, pure LLM Ask mode, sources/citations, chat history, replay, feedback, search modes, and SSE.
+用于处理 `/knowledge` 页面、RAG 检索、纯 LLM Ask、来源/引用、聊天历史、重放、反馈、搜索范围和 SSE。
 
-## User-facing modes
+## 用户可见模式
 
-`frontend/src/views/KnowledgeView.vue` exposes three response modes:
+`frontend/src/views/KnowledgeView.vue` 当前暴露三种响应模式：
 
-- `RAG`: retrieval-enhanced answer. Uses sources, citations, search scopes, history, feedback, replay.
-- `Ask`: pure LLM chat. Sends `answerMode: ASK`; backend skips local/web retrieval and returns `mode: ask` with no sources/citations.
-- `Agent`: admin-only workflow. Uses `/api/agent/**`; see `references/agent.md`.
+- `RAG`：检索增强回答，带来源、引用、搜索范围、历史与反馈。
+- `Ask`：纯大模型问答，发送 `answerMode: ASK`；后端跳过本地/联网检索，返回 `mode: ask`，不应带来源或引用。
+- `Agent`：仅管理员可见，走 `/api/agent/**`；细节见 `references/agent.md`。
 
-## Search scopes
+## 搜索范围
 
-Search scope is separate from response mode and applies to RAG/Agent, not Ask UI:
+搜索范围独立于响应模式，只作用于 `RAG` 与 `Agent`，不作用于 `Ask`：
 
-- `LOCAL_ONLY`: site/RAG local retrieval only.
-- `WEB_ONLY`: Qwen web search only.
-- `LOCAL_AND_WEB`: local retrieval plus Qwen web search.
+- `LOCAL_ONLY`：只做站内 / 知识库本地检索。
+- `WEB_ONLY`：只走 Qwen 联网搜索。
+- `LOCAL_AND_WEB`：本地检索与 Qwen 联网搜索同时参与。
 
-## Frontend chain
+## 前端链路
 
-- Page: `frontend/src/views/KnowledgeView.vue`
-- API wrapper: `frontend/src/api/blog.js`
-- Markdown/citation renderer: `frontend/src/utils/markdown.js`
+- 页面：`frontend/src/views/KnowledgeView.vue`
+- API 封装：`frontend/src/api/blog.js`
+- Markdown / 引用渲染：`frontend/src/utils/markdown.js`
 
-Important frontend behavior:
+关键前端行为：
 
-- SSE parser uses `fetch` + `ReadableStream`, not `EventSource`, so Authorization headers can be sent.
-- RAG/Ask stream endpoint: `/api/public/rag/ask/stream`.
-- Agent stream endpoint: `/api/agent/tasks/{taskId}/stream`.
-- The source rail is meaningful for RAG results; Ask results should have no sources.
-- Keep session list/history cache updates aligned with backend writes.
+- SSE 解析用的是 `fetch` + `ReadableStream`，不是 `EventSource`，这样才能带鉴权头。
+- RAG / Ask 流式接口：`/api/public/rag/ask/stream`
+- Agent 流式接口：`/api/agent/tasks/{taskId}/stream`
+- 来源侧栏只对 RAG 结果有意义；Ask 结果不应显示来源。
+- 会话列表与历史记录的本地刷新要与后端写入节奏保持一致。
 
-## Backend chain
+## 后端链路
 
-- Controller: `backend/src/main/java/com/hejulian/blog/controller/RagController.java`
-- DTO: `backend/src/main/java/com/hejulian/blog/dto/RagDtos.java`
-- Service: `backend/src/main/java/com/hejulian/blog/rag/application/RagApplicationService.java`
-- Runtime holder: `RagRuntimeContextHolder.java`
-- Qwen gateway: `DashScopeModelGateway.java`
-- Prompt/citation helpers: `RagPromptService.java`, `CitationGuardService.java`
-- Retrieval: `KnowledgeRetrievalService.java`, `MybatisRagKnowledgeBaseRepository.java`, `QdrantVectorStore.java`
-- Persistence mappers: `RagChatSessionMapper`, `RagChatMessageMapper`, `RagChunkMapper` and their XML files.
+- 控制器：`backend/src/main/java/com/hejulian/blog/controller/RagController.java`
+- DTO：`backend/src/main/java/com/hejulian/blog/dto/RagDtos.java`
+- 应用服务：`backend/src/main/java/com/hejulian/blog/rag/application/RagApplicationService.java`
+- 索引服务：`RagIndexingApplicationService.java`
+- 运行时上下文：`RagRuntimeContextHolder.java`
+- Qwen 网关：`DashScopeModelGateway.java`
+- Prompt / 引用辅助：`RagPromptService.java`、`CitationGuardService.java`
+- 检索：`KnowledgeRetrievalService.java`、`MybatisRagKnowledgeBaseRepository.java`、`QdrantVectorStore.java`
+- 持久化：`RagChatSessionMapper`、`RagChatMessageMapper`、`RagChunkMapper` 及其 XML
 
-## DTO contracts to preserve
+## 需要保持的 DTO 契约
 
-- `RagDtos.AskRequest`: `question`, `topK`, `sessionId`, `searchMode`, `answerMode`.
-- `answerMode: ASK` means pure model chat.
-- `RagDtos.AskResponse`: contains `sessionId`, `question`, `answer`, `mode`, `sources`, `history`, `strictCitation`, `searchMode`.
-- Chat message `mode` can include `retrieval`, `llm`, `ask`, or `agent`.
+- `RagDtos.AskRequest`：`question`、`topK`、`sessionId`、`searchMode`、`answerMode`
+- `answerMode: ASK` 表示纯模型对话
+- `RagDtos.AskResponse`：包含 `sessionId`、`question`、`answer`、`mode`、`sources`、`history`、`strictCitation`、`searchMode`
+- 聊天消息 `mode` 可能包含 `retrieval`、`llm`、`ask`、`agent`
 
-## SSE contract
+## SSE 契约
 
-Backend sends `StreamEvent` with:
+后端发送 `StreamEvent`，包含：
 
-- `type: meta`: initial state and empty answer.
-- `type: delta`: streamed text chunk.
-- `type: done`: final `AskResponse`.
-- `type: error`: failure message.
+- `type: meta`：初始状态与空回答
+- `type: delta`：流式文本增量
+- `type: done`：最终 `AskResponse`
+- `type: error`：错误消息
 
-If streaming appears delayed, check all three layers:
+如果流式响应看起来被“憋住”了，同时检查三层：
 
-- Backend `SseEmitter` sends events promptly.
-- Frontend parser handles event framing and updates `pendingTurn`/`result`.
-- Nginx has `proxy_buffering off` and `X-Accel-Buffering no` for stream endpoints.
+- 后端 `SseEmitter` 是否及时 flush 事件
+- 前端解析器是否正确处理 event framing，并更新 `pendingTurn` / `result`
+- nginx 是否对流式接口设置了 `proxy_buffering off` 与 `X-Accel-Buffering no`
 
-## History, replay, feedback
+## 历史、重放、反馈
 
-Relevant endpoints:
+相关接口包括：
 
 - `POST /api/public/rag/ask`
 - `POST /api/public/rag/ask/stream`
 - `POST /api/public/rag/replay`
 - `GET /api/public/rag/history`
 - `GET /api/public/rag/sessions`
-- rename/delete/restore/purge session endpoints
+- 会话 rename / delete / restore / purge 系列接口
 - `POST /api/public/rag/feedback`
 
-When editing these flows, check cache invalidation for RAG history and session list.
+调整这些流程时，要同步检查 RAG 历史与会话列表缓存失效。
 
-## Common pitfalls
+## 常见坑
 
-- Treating Ask as RAG with zero sources. Ask should bypass retrieval intentionally.
-- Requiring citation validation for Ask output. Ask should return `strictCitation=false`.
-- Hiding the chat-mode switch in Ask mode; only hide the search-scope switch.
-- Adding web search through non-Qwen/legacy paths.
-- Changing response shapes without updating `KnowledgeView.vue` and `frontend/src/api/blog.js`.
+- 把 Ask 当成“没有来源的 RAG”。Ask 必须显式绕过检索。
+- 对 Ask 结果强制做引用校验。Ask 应返回 `strictCitation=false`。
+- 在 Ask 模式下把聊天模式开关也隐藏掉；正确做法是只隐藏搜索范围切换。
+- 通过非 Qwen 或旧路径新增联网搜索逻辑。
+- 改了响应结构，却没同步更新 `KnowledgeView.vue` 与 `frontend/src/api/blog.js`。
 
-## Validation
+## 验证
 
-- Frontend: `npm run build`.
-- Backend: Maven package or `docker compose build backend`.
-- For SSE buffering changes, rebuild/recreate frontend container because nginx template is baked into the image.
+- 前端：`npm run build`
+- 后端：Maven 打包，或 `docker compose build backend`
+- 涉及 SSE / nginx 缓冲配置时，要重建或重启前端容器，因为 nginx 模板烘焙在镜像里

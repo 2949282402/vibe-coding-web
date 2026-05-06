@@ -79,6 +79,7 @@ const qwenApiKeyEditorVisible = ref(false);
 const contextRailCollapsed = ref(false);
 const chatStageRef = ref(null);
 const isChatStageFullscreen = ref(false);
+const advancedOptionsOpen = ref(false);
 
 let activeController = null;
 let activeAgentPoller = null;
@@ -106,9 +107,6 @@ function normalizeSearchMode(value) {
 
 function normalizeChatMode(value) {
   const normalized = String(value || '').trim().toUpperCase();
-  if (normalized === CHAT_MODE_AGENT) {
-    return CHAT_MODE_AGENT;
-  }
   if (normalized === CHAT_MODE_ASK) {
     return CHAT_MODE_ASK;
   }
@@ -765,6 +763,66 @@ const activeSession = computed(() =>
 const visibleSessions = computed(() => sessions.value.filter((item) => !item.deleted));
 const deletedSessions = computed(() => sessions.value.filter((item) => item.deleted));
 const latestFollowUps = computed(() => result.value?.followUpQuestions || []);
+const starterPrompts = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? [
+        '这个博客是如何部署的？',
+        '知识页面目前支持哪些模式？',
+        'Agent 写作流程现在是怎样的？',
+        'RAG 引用溯源是如何实现的？'
+      ]
+    : [
+        'How is this blog deployed?',
+        'What modes does the knowledge page support?',
+        'How does the current Agent writing flow work?',
+        'How is citation grounding implemented in RAG?'
+      ]
+);
+const responseMetaCopy = computed(() =>
+  preferences.locale === 'zh-CN'
+    ? {
+        groundedMode: '知识增强模式',
+        advanced: '高级选项',
+        sourceTitle: '来源',
+        confidenceTitle: '置信度',
+        latencyTitle: '耗时',
+        hitsTitle: '命中',
+        sourceLocal: '站内',
+        sourceWeb: '联网',
+        sourceMixed: '混合',
+        sourceNone: '模型直答',
+        confidenceHigh: '高',
+        confidenceMedium: '中',
+        confidenceLow: '低',
+        askHint: 'Ask 模式不会引用站内知识库内容。',
+        ragHint: '回答会优先基于站内知识生成。',
+        webHint: '这条回答主要依赖联网搜索，请结合原始来源核验。',
+        noneHint: '这条回答没有引用站内知识。',
+        groundedHint: '这条回答主要锚定在站内知识内容。',
+        mixedHint: '这条回答结合了站内内容与联网信息。'
+      }
+    : {
+        groundedMode: 'Grounded knowledge mode',
+        advanced: 'Advanced options',
+        sourceTitle: 'Source',
+        confidenceTitle: 'Confidence',
+        latencyTitle: 'Latency',
+        hitsTitle: 'Hits',
+        sourceLocal: 'Local',
+        sourceWeb: 'Web',
+        sourceMixed: 'Mixed',
+        sourceNone: 'Model only',
+        confidenceHigh: 'High',
+        confidenceMedium: 'Medium',
+        confidenceLow: 'Low',
+        askHint: 'Ask mode answers without citing the site knowledge base.',
+        ragHint: 'Answers default to grounded site knowledge.',
+        webHint: 'This answer relies mainly on web search and should be verified.',
+        noneHint: 'This answer does not cite on-site knowledge.',
+        groundedHint: 'This answer is grounded primarily in on-site knowledge.',
+        mixedHint: 'This answer combines on-site and web information.'
+      }
+);
 const searchModeOptions = computed(() => [
   {
     value: SEARCH_MODE_LOCAL_ONLY,
@@ -779,27 +837,18 @@ const searchModeOptions = computed(() => [
     label: copy.value.searchModeHybrid
   }
 ]);
-const canUseAgentMode = computed(() => Boolean(authStore.isAdmin));
-const chatModeOptions = computed(() => {
-  const options = [
-    {
-      value: CHAT_MODE_RAG,
-      label: copy.value.chatModeRag || 'RAG'
-    },
-    {
-      value: CHAT_MODE_ASK,
-      label: copy.value.chatModeAsk || 'Ask'
-    }
-  ];
-  if (canUseAgentMode.value) {
-    options.push({
-      value: CHAT_MODE_AGENT,
-      label: copy.value.chatModeAgent || 'Agent'
-    });
+const canUseAgentMode = computed(() => false);
+const chatModeOptions = computed(() => [
+  {
+    value: CHAT_MODE_RAG,
+    label: copy.value.chatModeRag || 'RAG'
+  },
+  {
+    value: CHAT_MODE_ASK,
+    label: copy.value.chatModeAsk || 'Ask'
   }
-  return options;
-});
-const isAgentMode = computed(() => canUseAgentMode.value && chatMode.value === CHAT_MODE_AGENT);
+]);
+const isAgentMode = computed(() => false);
 const isAskMode = computed(() => chatMode.value === CHAT_MODE_ASK);
 const canUseHybridSearch = computed(() => Boolean(qwenConfig.value.webSearchEnabled));
 const qwenCopy = computed(() =>
@@ -883,6 +932,7 @@ const uiCopy = computed(() =>
       }
 );
 const hasQwenConfig = computed(() => Boolean(qwenConfig.value.hasApiKey && qwenConfig.value.selectedModel));
+const showComposerControls = computed(() => authStore.isAuthenticated && hasQwenConfig.value);
 const canSubmitQuestion = computed(() => {
   if (!authStore.isAuthenticated) {
     return false;
@@ -1128,6 +1178,92 @@ function sourceMetaLabel(source) {
     return source.domain || source.url || copy.value.webSourceFallback;
   }
   return source.slug || copy.value.blogSourceLabel;
+}
+
+
+function normalizeResponseMetadata(response = {}) {
+  return {
+    ...response,
+    sourceType: String(response?.sourceType || 'none').toLowerCase(),
+    retrievalHitCount: Number(response?.retrievalHitCount || 0),
+    usedWebSearch: Boolean(response?.usedWebSearch),
+    latencyMs: Number(response?.latencyMs || 0),
+    confidenceLevel: String(response?.confidenceLevel || 'low').toLowerCase(),
+    knowledgeUpdatedAt: response?.knowledgeUpdatedAt || null
+  };
+}
+
+function withAssistantMetadata(message, response) {
+  if (!message || message.role !== 'assistant' || isAgentMessage(message)) {
+    return message;
+  }
+  return {
+    ...message,
+    sourceType: response.sourceType,
+    retrievalHitCount: response.retrievalHitCount,
+    usedWebSearch: response.usedWebSearch,
+    latencyMs: response.latencyMs,
+    confidenceLevel: response.confidenceLevel,
+    knowledgeUpdatedAt: response.knowledgeUpdatedAt
+  };
+}
+
+function shouldShowResponseMeta(message) {
+  return (
+    message?.role === 'assistant' &&
+    !message?.skeleton &&
+    !isAgentMessage(message) &&
+    (message?.sourceType || message?.confidenceLevel || message?.latencyMs || message?.retrievalHitCount)
+  );
+}
+
+function responseSourceText(sourceType) {
+  switch (String(sourceType || 'none').toLowerCase()) {
+    case 'local':
+      return responseMetaCopy.value.sourceLocal;
+    case 'web':
+      return responseMetaCopy.value.sourceWeb;
+    case 'mixed':
+      return responseMetaCopy.value.sourceMixed;
+    default:
+      return responseMetaCopy.value.sourceNone;
+  }
+}
+
+function responseConfidenceText(confidenceLevel) {
+  switch (String(confidenceLevel || 'low').toLowerCase()) {
+    case 'high':
+      return responseMetaCopy.value.confidenceHigh;
+    case 'medium':
+      return responseMetaCopy.value.confidenceMedium;
+    default:
+      return responseMetaCopy.value.confidenceLow;
+  }
+}
+
+function responseHintText(message) {
+  const sourceType = String(message?.sourceType || 'none').toLowerCase();
+  if (isAskMode.value && sourceType === 'none') {
+    return responseMetaCopy.value.askHint;
+  }
+  if (sourceType === 'local') {
+    return responseMetaCopy.value.groundedHint;
+  }
+  if (sourceType === 'mixed') {
+    return responseMetaCopy.value.mixedHint;
+  }
+  if (sourceType === 'web') {
+    return responseMetaCopy.value.webHint;
+  }
+  return responseMetaCopy.value.noneHint;
+}
+
+function formatLatencyMs(value) {
+  const latency = Number(value || 0);
+  if (!Number.isFinite(latency) || latency <= 0) {
+    return '';
+  }
+  return latency >= 1000 ? `${(latency / 1000).toFixed(1)}s` : `${Math.round(latency)}ms`;
 }
 
 function shouldShowInlineSources(message) {
@@ -1443,21 +1579,31 @@ function createPendingTurn(normalizedQuestion) {
 
 function applyResponse(response, options = {}) {
   const { clearPending = false } = options;
-  result.value = response;
-  history.value = response.history || [];
-  persistHistoryCache(response?.sessionId || activeSessionId.value, history.value);
-  if (response?.searchMode) {
-    searchMode.value = normalizeSearchMode(response.searchMode);
+  const normalizedResponse = normalizeResponseMetadata(response);
+  result.value = normalizedResponse;
+  history.value = (normalizedResponse.history || []).map((message) => ({ ...message }));
+  if (!isAgentMessage(normalizedResponse)) {
+    const assistantIndex = [...history.value]
+      .map((message, index) => ({ message, index }))
+      .reverse()
+      .find((entry) => entry.message.role === 'assistant' && !isAgentMessage(entry.message))?.index;
+    if (Number.isInteger(assistantIndex)) {
+      history.value.splice(assistantIndex, 1, withAssistantMetadata(history.value[assistantIndex], normalizedResponse));
+    }
+  }
+  persistHistoryCache(normalizedResponse?.sessionId || activeSessionId.value, history.value);
+  if (normalizedResponse?.searchMode) {
+    searchMode.value = normalizeSearchMode(normalizedResponse.searchMode);
     persistSearchMode();
   }
   if (clearPending) {
     clearPendingTurn();
   }
 
-  if (response.sessionId && response.sessionId !== activeSessionId.value) {
-    activeSessionId.value = response.sessionId;
+  if (normalizedResponse.sessionId && normalizedResponse.sessionId !== activeSessionId.value) {
+    activeSessionId.value = normalizedResponse.sessionId;
     persistActiveSession();
-    syncRouteSession(response.sessionId);
+    syncRouteSession(normalizedResponse.sessionId);
   }
 }
 
@@ -1565,6 +1711,7 @@ async function loadHistory(sessionToLoad = activeSessionId.value) {
   const restoredFromCache = restoreHistoryCache(sessionToLoad);
   historyLoading.value = true;
   result.value = null;
+  advancedOptionsOpen.value = false;
   clearPendingTurn();
   cancelEditMessage();
   let loaded = false;
@@ -1698,7 +1845,13 @@ function createEmptyResult(normalizedQuestion) {
     followUpQuestions: [],
     sources: [],
     history: history.value,
-    strictCitation: !isAskMode.value
+    strictCitation: !isAskMode.value,
+    sourceType: isAskMode.value ? 'none' : 'local',
+    retrievalHitCount: 0,
+    usedWebSearch: false,
+    latencyMs: 0,
+    confidenceLevel: isAskMode.value ? 'low' : 'medium',
+    knowledgeUpdatedAt: null
   };
 }
 
@@ -2069,12 +2222,16 @@ watch(
 
 watch(searchMode, () => {
   persistSearchMode();
+  advancedOptionsOpen.value = true;
 });
 
 watch(chatMode, () => {
-  if (chatMode.value === CHAT_MODE_AGENT && !canUseAgentMode.value) {
+  if (chatMode.value === CHAT_MODE_AGENT) {
     chatMode.value = CHAT_MODE_RAG;
     return;
+  }
+  if (chatMode.value === CHAT_MODE_ASK) {
+    advancedOptionsOpen.value = true;
   }
   persistChatMode();
 });
@@ -2296,6 +2453,12 @@ onBeforeUnmount(() => {
                   ? copy.modeLlm
                   : copy.modeRetrieval
             }}</span>
+            <span v-if="result.sourceType" class="stage-badge meta-badge" :class="`is-${result.sourceType}`">
+              {{ responseMetaCopy.sourceTitle }}: {{ responseSourceText(result.sourceType) }}
+            </span>
+            <span v-if="result.confidenceLevel" class="stage-badge meta-badge">
+              {{ responseMetaCopy.confidenceTitle }}: {{ responseConfidenceText(result.confidenceLevel) }}
+            </span>
           </div>
         </div>
       </header>
@@ -2351,6 +2514,22 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
+
+
+              <div v-if="shouldShowResponseMeta(message)" class="response-meta-row">
+                <span class="response-meta-pill" :class="`is-${message.sourceType || 'none'}`">
+                  {{ responseMetaCopy.sourceTitle }}: {{ responseSourceText(message.sourceType) }}
+                </span>
+                <span class="response-meta-pill">
+                  {{ responseMetaCopy.confidenceTitle }}: {{ responseConfidenceText(message.confidenceLevel) }}
+                </span>
+                <span v-if="formatLatencyMs(message.latencyMs)" class="response-meta-pill">
+                  {{ responseMetaCopy.latencyTitle }}: {{ formatLatencyMs(message.latencyMs) }}
+                </span>
+                <span v-if="Number(message.retrievalHitCount) > 0" class="response-meta-pill">
+                  {{ responseMetaCopy.hitsTitle }}: {{ message.retrievalHitCount }}
+                </span>
+              </div>
               <div
                 v-if="
                   message.role === 'assistant' &&
@@ -2399,6 +2578,7 @@ onBeforeUnmount(() => {
                   :class="{ pending: message.pending }"
                   v-html="message.renderedContent"
                 ></div>
+                <p v-if="shouldShowResponseMeta(message)" class="response-meta-hint muted">{{ responseHintText(message) }}</p>
 
                 <div v-if="hasAgentTrace(message)" class="agent-trace-panel">
                   <div class="agent-trace-head">
@@ -2560,8 +2740,21 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else class="empty-state">
+          <span class="empty-eyebrow muted">{{ responseMetaCopy.groundedMode }}</span>
           <h3>{{ copy.emptyStateTitle }}</h3>
           <p class="muted">{{ copy.emptyStateBody }}</p>
+          <div class="empty-prompt-grid">
+            <button
+              v-for="prompt in starterPrompts"
+              :key="prompt"
+              type="button"
+              class="prompt-chip empty-prompt-chip"
+              :disabled="loading"
+              @click="submitQuestion(prompt)"
+            >
+              {{ prompt }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2603,44 +2796,23 @@ onBeforeUnmount(() => {
               :disabled="loading || !authStore.isAuthenticated || !hasQwenConfig"
               @keydown="handleComposerKeydown"
             />
-            <div class="composer-inline-hints">
-              <div class="search-mode-group">
-                <div class="search-mode-picker" :aria-label="copy.chatModeTitle || 'Response mode'" role="group">
-                  <button
-                    v-for="option in chatModeOptions"
-                    :key="option.value"
-                    type="button"
-                    class="search-mode-option"
-                    :data-mode="option.value"
-                    :class="{ active: chatMode === option.value }"
-                    :aria-pressed="chatMode === option.value"
-                    :disabled="loading"
-                    @click="chatMode = option.value"
-                  >
-                    <span class="search-mode-option-dot" aria-hidden="true"></span>
-                    {{ option.label }}
-                  </button>
-                </div>
+            <div class="composer-inline-hints" :class="{ 'is-locked': !showComposerControls }">
+              <div class="composer-primary-mode">
+                <span class="composer-badge primary">{{ responseMetaCopy.groundedMode }}</span>
+                <span class="composer-badge subtle">{{ isAskMode ? copy.chatModeAsk || 'Ask' : copy.chatModeRag || 'RAG' }}</span>
               </div>
-              <div v-if="!isAskMode" class="search-mode-group">
-                <div class="search-mode-picker" :aria-label="copy.searchModeTitle" role="group">
-                  <button
-                    v-for="option in searchModeOptions"
-                    :key="option.value"
-                    type="button"
-                    class="search-mode-option"
-                    :data-mode="option.value"
-                    :class="{ active: searchMode === option.value }"
-                    :aria-pressed="searchMode === option.value"
-                    :disabled="loading || (isWebSearchModeValue(option.value) && !canUseHybridSearch)"
-                    @click="searchMode = option.value"
-                  >
-                    <span class="search-mode-option-dot" aria-hidden="true"></span>
-                    {{ option.label }}
-                  </button>
-                </div>
-              </div>
-              <div class="qwen-inline-controls">
+              <button
+                v-if="showComposerControls"
+                type="button"
+                class="search-mode-option advanced-toggle-btn"
+                :class="{ active: advancedOptionsOpen }"
+                :disabled="loading"
+                @click="advancedOptionsOpen = !advancedOptionsOpen"
+              >
+                <span class="search-mode-option-dot" aria-hidden="true"></span>
+                {{ responseMetaCopy.advanced }}
+              </button>
+              <div v-if="showComposerControls" class="qwen-inline-controls">
                 <el-select
                   :model-value="qwenConfig.selectedModel"
                   class="qwen-model-select"
@@ -2665,10 +2837,11 @@ onBeforeUnmount(() => {
                   {{ qwenCopy.editApiKey }}
                 </el-button>
               </div>
-              <span class="composer-hint-chip muted">{{ uiCopy.composerSubmitHint }}</span>
-              <span class="composer-hint-chip muted">{{ uiCopy.composerNewlineHint }}</span>
-              <el-button v-if="streaming" plain class="composer-inline-btn" @click="stopStreaming()">{{ copy.stop }}</el-button>
+              <span v-if="showComposerControls" class="composer-hint-chip muted">{{ uiCopy.composerSubmitHint }}</span>
+              <span v-if="showComposerControls" class="composer-hint-chip muted">{{ uiCopy.composerNewlineHint }}</span>
+              <el-button v-if="showComposerControls && streaming" plain class="composer-inline-btn" @click="stopStreaming()">{{ copy.stop }}</el-button>
               <el-button
+                v-if="showComposerControls"
                 class="send-btn composer-inline-btn"
                 type="primary"
                 :disabled="!canSubmitQuestion"
@@ -2680,6 +2853,47 @@ onBeforeUnmount(() => {
                 </span>
               </el-button>
             </div>
+          </div>
+          <div v-if="showComposerControls && advancedOptionsOpen" class="advanced-options-panel">
+            <div class="search-mode-group">
+              <span class="search-mode-label">{{ copy.chatModeTitle || 'Response mode' }}</span>
+              <div class="search-mode-picker" :aria-label="copy.chatModeTitle || 'Response mode'" role="group">
+                <button
+                  v-for="option in chatModeOptions"
+                  :key="option.value"
+                  type="button"
+                  class="search-mode-option"
+                  :data-mode="option.value"
+                  :class="{ active: chatMode === option.value }"
+                  :aria-pressed="chatMode === option.value"
+                  :disabled="loading"
+                  @click="chatMode = option.value"
+                >
+                  <span class="search-mode-option-dot" aria-hidden="true"></span>
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+            <div v-if="!isAskMode" class="search-mode-group">
+              <span class="search-mode-label">{{ copy.searchModeTitle }}</span>
+              <div class="search-mode-picker" :aria-label="copy.searchModeTitle" role="group">
+                <button
+                  v-for="option in searchModeOptions"
+                  :key="option.value"
+                  type="button"
+                  class="search-mode-option"
+                  :data-mode="option.value"
+                  :class="{ active: searchMode === option.value }"
+                  :aria-pressed="searchMode === option.value"
+                  :disabled="loading || (isWebSearchModeValue(option.value) && !canUseHybridSearch)"
+                  @click="searchMode = option.value"
+                >
+                  <span class="search-mode-option-dot" aria-hidden="true"></span>
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+            <p class="advanced-mode-hint muted">{{ isAskMode ? responseMetaCopy.askHint : responseMetaCopy.ragHint }}</p>
           </div>
           <div v-if="qwenApiKeyEditorVisible" class="qwen-inline-editor">
             <el-input
@@ -2814,7 +3028,7 @@ onBeforeUnmount(() => {
   margin: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 300px;
-  gap: 14px;
+  gap: 16px;
   align-items: stretch;
   --rag-radius-panel: 24px;
   --rag-radius-card: 18px;
@@ -2860,10 +3074,14 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-radius: var(--rag-radius-panel);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
-    rgba(9, 9, 9, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: none;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
+    rgba(9, 9, 9, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(34px) saturate(142%);
+  -webkit-backdrop-filter: blur(34px) saturate(142%);
 }
 
 .sidebar-toolbar {
@@ -2879,7 +3097,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-main);
-  transition: 0.2s ease;
+  transition: transform 0.28s var(--ease-liquid), border-color 0.28s var(--ease-soft), background 0.28s var(--ease-soft), box-shadow 0.28s var(--ease-liquid), color 0.28s var(--ease-soft);
 }
 
 .sidebar-toggle,
@@ -2900,6 +3118,8 @@ onBeforeUnmount(() => {
 .ghost-action:hover {
   border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
 }
 
 .sidebar-toggle {
@@ -3000,21 +3220,27 @@ onBeforeUnmount(() => {
 .session-item {
   padding: 12px;
   border-radius: var(--rag-radius-card);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.028);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    rgba(255, 255, 255, 0.028);
   cursor: pointer;
-  transition: 0.2s ease;
+  transition: transform 0.3s var(--ease-liquid), border-color 0.3s var(--ease-soft), background 0.3s var(--ease-soft), box-shadow 0.3s var(--ease-liquid);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .session-item:hover {
-  border-color: rgba(215, 199, 173, 0.22);
+  transform: translateY(-3px);
+  border-color: rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.12);
 }
 
 .session-item.active {
-  border-color: rgba(219, 203, 178, 0.2);
+  border-color: rgba(255, 255, 255, 0.18);
   background:
-    linear-gradient(180deg, rgba(216, 196, 164, 0.1), rgba(255, 255, 255, 0.03)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   box-shadow: none;
 }
@@ -3064,25 +3290,25 @@ onBeforeUnmount(() => {
 }
 
 .ghost-action.danger {
-  border-color: rgba(255, 118, 118, 0.16);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .ghost-action.danger-strong {
-  color: #ffd6d6;
-  border-color: rgba(255, 110, 110, 0.28);
-  background: linear-gradient(180deg, rgba(120, 28, 28, 0.28), rgba(72, 16, 16, 0.18));
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
   box-shadow: none;
 }
 
 .ghost-action.danger-strong:hover {
-  border-color: rgba(255, 126, 126, 0.42);
-  background: linear-gradient(180deg, rgba(150, 34, 34, 0.34), rgba(88, 18, 18, 0.24));
-  color: #fff1f1;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04));
+  color: var(--text-main);
 }
 
 .ghost-action.danger:hover {
-  border-color: rgba(255, 104, 104, 0.28);
-  color: #ff9f9f;
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text-main);
 }
 
 .capability-pill,
@@ -3091,7 +3317,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
-  transition: 0.2s ease;
+  transition: transform 0.28s var(--ease-liquid), border-color 0.28s var(--ease-soft), background 0.28s var(--ease-soft), color 0.28s var(--ease-soft), box-shadow 0.28s var(--ease-liquid);
 }
 
 .capability-pill {
@@ -3114,6 +3340,8 @@ onBeforeUnmount(() => {
   color: var(--text-main);
   border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.1);
 }
 
 .prompt-chip:disabled {
@@ -3133,12 +3361,16 @@ onBeforeUnmount(() => {
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   border-radius: var(--rag-radius-panel);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    radial-gradient(circle at top center, rgba(222, 205, 173, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.05), transparent 26%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015)),
-    rgba(12, 12, 12, 0.92);
-  box-shadow: none;
+    rgba(12, 12, 12, 0.64);
+  box-shadow: 0 32px 60px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(38px) saturate(142%);
+  -webkit-backdrop-filter: blur(38px) saturate(142%);
+  animation: knowledge-stage-enter 0.78s var(--ease-soft);
 }
 
 .chat-stage:fullscreen {
@@ -3149,13 +3381,20 @@ onBeforeUnmount(() => {
 }
 
 .chat-stage-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
   padding: 18px 22px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+    linear-gradient(180deg, rgba(16, 16, 16, 0.76), rgba(16, 16, 16, 0.48)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012));
+  backdrop-filter: blur(16px);
 }
 
 .stage-copy {
@@ -3176,8 +3415,9 @@ onBeforeUnmount(() => {
 
 .chat-stage-title {
   margin: 0;
-  font-size: 1.2rem;
-  letter-spacing: -0.02em;
+  font-size: 1.28rem;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
 }
 
 .stage-subtitle {
@@ -3276,7 +3516,7 @@ onBeforeUnmount(() => {
 
 .conversation-viewport {
   overflow: auto;
-  padding: 18px 20px 12px;
+  padding: 22px 22px 12px;
   scroll-padding-bottom: 200px;
 }
 
@@ -3289,7 +3529,7 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 30px;
 }
 
 .chat-row {
@@ -3318,15 +3558,16 @@ onBeforeUnmount(() => {
   width: 40px;
   height: 40px;
   border-radius: var(--rag-radius-avatar);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-secondary);
   font-size: 0.68rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .avatar-ring-assistant {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04));
 }
 
 .avatar-ring-user {
@@ -3344,6 +3585,47 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.response-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.response-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--rag-radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025)),
+    rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.response-meta-pill.is-local {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.response-meta-pill.is-mixed {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.response-meta-pill.is-web,
+.response-meta-pill.is-none {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.response-meta-hint {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
 }
 
 .answer-variants {
@@ -3372,14 +3654,16 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: 0.18s ease;
+  transition: transform 0.26s var(--ease-liquid), border-color 0.26s var(--ease-soft), background 0.26s var(--ease-soft), color 0.26s var(--ease-soft), box-shadow 0.26s var(--ease-liquid);
 }
 
 .answer-variant-chip:hover,
 .answer-variant-chip.active {
   color: var(--text-main);
   border-color: var(--line-strong);
-  background: rgba(255, 248, 233, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
 
 .message-action-btn {
@@ -3387,16 +3671,18 @@ onBeforeUnmount(() => {
   padding: 0 12px;
   border-radius: var(--rag-radius-pill);
   border: 1px solid var(--line);
-  background: rgba(255, 248, 233, 0.04);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: 0.18s ease;
+  transition: transform 0.26s var(--ease-liquid), border-color 0.26s var(--ease-soft), background 0.26s var(--ease-soft), color 0.26s var(--ease-soft), box-shadow 0.26s var(--ease-liquid);
 }
 
 .message-action-btn:hover {
   color: var(--text-main);
   border-color: var(--line-strong);
-  background: rgba(255, 248, 233, 0.08);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
 
 .message-edit-shell {
@@ -3450,7 +3736,7 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: 0.18s ease;
+  transition: transform 0.26s var(--ease-liquid), border-color 0.26s var(--ease-soft), background 0.26s var(--ease-soft), color 0.26s var(--ease-soft), box-shadow 0.26s var(--ease-liquid);
   min-width: 0;
 }
 
@@ -3458,6 +3744,8 @@ onBeforeUnmount(() => {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-main);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
 }
 
 .inline-source-index {
@@ -3485,8 +3773,8 @@ onBeforeUnmount(() => {
 }
 
 .inline-source-type.web {
-  background: rgba(205, 186, 146, 0.14);
-  color: #dbc290;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
 }
 
 .inline-followups-list {
@@ -3540,7 +3828,7 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: 0.2s ease;
+  transition: transform 0.26s var(--ease-liquid), border-color 0.26s var(--ease-soft), background 0.26s var(--ease-soft), color 0.26s var(--ease-soft), box-shadow 0.26s var(--ease-liquid);
   font-size: 0.74rem;
 }
 
@@ -3548,6 +3836,8 @@ onBeforeUnmount(() => {
   border-color: var(--line-strong);
   color: var(--text-main);
   background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
 }
 
 .feedback-pill.active {
@@ -3580,12 +3870,13 @@ onBeforeUnmount(() => {
   color: var(--brand-accent, #d8d8d8);
   text-decoration: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-  transition: 0.18s ease;
+  transition: transform 0.24s var(--ease-liquid), color 0.24s var(--ease-soft), background 0.24s var(--ease-soft), border-color 0.24s var(--ease-soft);
 }
 
 .citation-link:hover {
   color: var(--text-main);
   background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
 }
 
 .chat-bubble {
@@ -3596,10 +3887,15 @@ onBeforeUnmount(() => {
 }
 
 .assistant-bubble {
-  border: 1px solid transparent;
-  background: transparent;
-  padding-left: 0;
-  padding-right: 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.022);
+  padding-left: 18px;
+  padding-right: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .chat-bubble.pending {
@@ -3661,16 +3957,16 @@ onBeforeUnmount(() => {
 
 .agent-trace-status.completed,
 .agent-step-status.completed {
-  color: #9ee7c0;
-  border-color: rgba(108, 220, 150, 0.22);
-  background: rgba(80, 196, 128, 0.1);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .agent-trace-status.failed,
 .agent-step-status.failed {
-  color: #ffb7b7;
-  border-color: rgba(255, 120, 120, 0.24);
-  background: rgba(255, 100, 100, 0.08);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .agent-step-list {
@@ -3691,9 +3987,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 14px;
   border-radius: var(--rag-radius-card);
-  border: 1px solid rgba(142, 230, 181, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background:
-    linear-gradient(180deg, rgba(80, 196, 128, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.025);
 }
 
@@ -3777,7 +4073,7 @@ onBeforeUnmount(() => {
 }
 
 .agent-tool-row.failed .agent-tool-dot {
-  background: #ff8585;
+  background: #9c9c9c;
 }
 
 .agent-tool-dot {
@@ -3785,7 +4081,7 @@ onBeforeUnmount(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #8ee6b5;
+  background: #d4d4d4;
 }
 
 .agent-tool-empty {
@@ -3796,9 +4092,11 @@ onBeforeUnmount(() => {
   width: fit-content;
   max-width: min(78%, 720px);
   margin-left: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
 }
 
 .pending-bubble {
@@ -3832,12 +4130,12 @@ onBeforeUnmount(() => {
 
 .empty-state {
   width: min(760px, 100%);
-  margin: min(12vh, 100px) auto 0;
+  margin: min(11vh, 96px) auto 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 14px;
+  gap: 16px;
 }
 
 .empty-eyebrow {
@@ -3872,19 +4170,24 @@ onBeforeUnmount(() => {
   bottom: 0;
   z-index: 3;
   padding: 14px 18px 18px;
-  background: transparent;
-  backdrop-filter: none;
+  background: linear-gradient(180deg, rgba(12, 12, 12, 0), rgba(12, 12, 12, 0.62) 22%, rgba(12, 12, 12, 0.82));
+  backdrop-filter: blur(16px);
 }
 
 .composer-card {
   position: relative;
-  width: 90%;
+  width: min(860px, 100%);
   max-width: none;
   margin: 0 auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.03)),
+    rgba(16, 16, 16, 0.56);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.18);
+  border-radius: calc(var(--rag-radius-bubble) + 2px);
+  backdrop-filter: blur(34px) saturate(145%);
+  -webkit-backdrop-filter: blur(34px) saturate(145%);
 }
 
 .toolbar-group {
@@ -3943,7 +4246,7 @@ onBeforeUnmount(() => {
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  transition: 0.2s ease;
+  transition: transform 0.28s var(--ease-liquid), border-color 0.28s var(--ease-soft), background 0.28s var(--ease-soft), color 0.28s var(--ease-soft), box-shadow 0.28s var(--ease-liquid);
   white-space: nowrap;
 }
 
@@ -3959,6 +4262,8 @@ onBeforeUnmount(() => {
   color: var(--text-main);
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
 }
 
 .search-mode-option.active {
@@ -3972,18 +4277,18 @@ onBeforeUnmount(() => {
 }
 
 .search-mode-option[data-mode='LOCAL_ONLY'].active {
-  background: linear-gradient(135deg, rgba(255, 195, 87, 0.28), rgba(255, 141, 87, 0.2));
-  border-color: rgba(255, 197, 92, 0.34);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(180, 180, 180, 0.08));
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .search-mode-option[data-mode='WEB_ONLY'].active {
-  background: linear-gradient(135deg, rgba(88, 211, 187, 0.26), rgba(72, 163, 255, 0.18));
-  border-color: rgba(88, 211, 187, 0.34);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(150, 150, 150, 0.08));
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .search-mode-option[data-mode='LOCAL_AND_WEB'].active {
-  background: linear-gradient(135deg, rgba(72, 163, 255, 0.28), rgba(88, 211, 187, 0.22));
-  border-color: rgba(96, 183, 255, 0.34);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(165, 165, 165, 0.08));
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .search-mode-option:disabled {
@@ -4012,12 +4317,14 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   box-shadow: none;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  transition: border-color 0.28s var(--ease-soft), background-color 0.28s var(--ease-soft), transform 0.28s var(--ease-liquid), box-shadow 0.28s var(--ease-liquid);
 }
 
 .composer-input-shell :deep(.el-textarea__inner:focus) {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.045);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.12);
 }
 
 .composer-inline-hints {
@@ -4025,9 +4332,55 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   padding: 0;
+}
+
+
+.composer-primary-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.composer-badge.primary {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.composer-badge.subtle,
+.meta-badge {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.advanced-toggle-btn {
+  margin-right: auto;
+}
+
+.advanced-options-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: var(--rag-radius-card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    rgba(255, 255, 255, 0.025);
+}
+
+.advanced-mode-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.empty-prompt-chip {
+  justify-content: flex-start;
+  min-height: 52px;
+  padding: 0 14px;
 }
 
 .composer-hint-chip {
@@ -4076,7 +4429,7 @@ onBeforeUnmount(() => {
   padding: 16px;
   border-radius: var(--rag-radius-card);
   border: 1px solid var(--line);
-  background: rgba(255, 248, 233, 0.04);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .qwen-inline-controls {
@@ -4134,17 +4487,17 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   min-height: 32px;
   padding: 0 14px;
-  border-color: rgba(220, 193, 136, 0.5);
-  background: linear-gradient(180deg, rgba(221, 194, 138, 0.96), rgba(181, 143, 76, 0.96));
-  color: #1d1711;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(186, 186, 186, 0.9));
+  color: #111214;
   box-shadow: none;
 }
 
 .send-btn.composer-inline-btn:hover,
 .send-btn.composer-inline-btn:focus-visible {
-  border-color: rgba(220, 193, 136, 0.66);
-  background: linear-gradient(180deg, rgba(236, 214, 170, 0.98), rgba(194, 154, 87, 0.98));
-  color: #17120d;
+  border-color: rgba(255, 255, 255, 0.24);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(208, 208, 208, 0.94));
+  color: #111214;
 }
 
 .context-rail {
@@ -4197,9 +4550,14 @@ onBeforeUnmount(() => {
   padding: 16px;
   border-radius: var(--rag-radius-panel);
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    radial-gradient(circle at top left, rgba(218, 201, 170, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018) 58%, rgba(255, 255, 255, 0));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03)),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018) 58%, rgba(255, 255, 255, 0));
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(28px) saturate(138%);
+  -webkit-backdrop-filter: blur(28px) saturate(138%);
 }
 
 .context-panel::after {
@@ -4234,6 +4592,8 @@ onBeforeUnmount(() => {
   border-radius: var(--rag-radius-card);
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .source-groups {
@@ -4250,16 +4610,16 @@ onBeforeUnmount(() => {
 
 .source-group.is-blog {
   background:
-    linear-gradient(180deg, rgba(255, 181, 72, 0.08), rgba(255, 255, 255, 0.02) 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 42%),
     rgba(255, 255, 255, 0.025);
-  border-color: rgba(255, 184, 88, 0.16);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .source-group.is-web {
   background:
-    linear-gradient(180deg, rgba(88, 171, 255, 0.1), rgba(255, 255, 255, 0.02) 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 42%),
     rgba(255, 255, 255, 0.025);
-  border-color: rgba(92, 177, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 .source-group-head,
@@ -4283,11 +4643,11 @@ onBeforeUnmount(() => {
 }
 
 .source-group.is-blog .source-group-marker {
-  background: linear-gradient(135deg, #ffcf72, #ff9d5c);
+  background: linear-gradient(135deg, #f5f5f5, #adadad);
 }
 
 .source-group.is-web .source-group-marker {
-  background: linear-gradient(135deg, #69b8ff, #5de1bf);
+  background: linear-gradient(135deg, #d6d6d6, #7f7f7f);
 }
 
 .source-group-title {
@@ -4306,11 +4666,11 @@ onBeforeUnmount(() => {
 }
 
 .source-group.is-blog .source-group-count {
-  color: #ffd39b;
+  color: #f2f2f2;
 }
 
 .source-group.is-web .source-group-count {
-  color: #b8deff;
+  color: #e0e0e0;
 }
 
 .source-more-btn {
@@ -4326,16 +4686,22 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 12px 13px;
   border-radius: var(--rag-radius-card);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.028);
-  transition: 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.028);
+  transition: transform 0.3s var(--ease-liquid), border-color 0.3s var(--ease-soft), background 0.3s var(--ease-soft), box-shadow 0.3s var(--ease-liquid);
   scroll-margin-top: 18px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .source-card:hover,
 .thread-item:hover {
+  transform: translateY(-3px);
   border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.12);
 }
 
 .source-card:target {
@@ -4364,7 +4730,7 @@ onBeforeUnmount(() => {
 .source-expand-enter-active,
 .source-expand-leave-active,
 .source-expand-move {
-  transition: transform 0.24s ease, opacity 0.24s ease;
+  transition: transform 0.3s var(--ease-liquid), opacity 0.3s var(--ease-soft);
 }
 
 .source-expand-enter-from,
@@ -4398,9 +4764,9 @@ onBeforeUnmount(() => {
 }
 
 .source-type-badge.web {
-  background: rgba(108, 160, 255, 0.12);
-  border-color: rgba(108, 160, 255, 0.22);
-  color: #cfe0ff;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
 }
 
 .source-meta-row {
@@ -4428,20 +4794,28 @@ onBeforeUnmount(() => {
 
 html[data-theme='light'] .knowledge-sidebar {
   background:
-    radial-gradient(circle at top left, rgba(196, 171, 130, 0.16), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 241, 236, 0.96)),
-    rgba(248, 248, 245, 0.96);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.14)),
+    radial-gradient(circle at top left, rgba(0, 0, 0, 0.05), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 241, 241, 0.96)),
+    rgba(246, 246, 246, 0.72);
 }
 
 html[data-theme='light'] .chat-stage {
   background:
-    radial-gradient(circle at top center, rgba(196, 171, 130, 0.14), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 241, 236, 0.96)),
-    rgba(248, 248, 245, 0.95);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12)),
+    radial-gradient(circle at top center, rgba(0, 0, 0, 0.04), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 241, 241, 0.96)),
+    rgba(246, 246, 246, 0.74);
+}
+
+html[data-theme='light'] .chat-stage-head {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 243, 243, 0.8)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012));
 }
 
 html[data-theme='light'] .composer-shell {
-  background: transparent;
+  background: linear-gradient(180deg, rgba(246, 246, 246, 0), rgba(246, 246, 246, 0.82) 22%, rgba(246, 246, 246, 0.95));
 }
 
 html[data-theme='light'] .composer-card,
@@ -4460,45 +4834,45 @@ html[data-theme='light'] .search-mode-picker,
 html[data-theme='light'] .composer-hint-chip,
 html[data-theme='light'] .qwen-config-panel,
 html[data-theme='light'] .qwen-model-select :deep(.el-select__wrapper) {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.28);
 }
 
 html[data-theme='light'] .search-mode-option:hover:not(:disabled) {
-  background: rgba(196, 171, 130, 0.08);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 html[data-theme='light'] .search-mode-option[data-mode='LOCAL_ONLY'].active {
-  background: linear-gradient(135deg, rgba(255, 190, 72, 0.26), rgba(255, 128, 72, 0.18));
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.04));
 }
 
 html[data-theme='light'] .search-mode-option[data-mode='WEB_ONLY'].active {
-  background: linear-gradient(135deg, rgba(63, 200, 170, 0.18), rgba(72, 163, 255, 0.14));
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.09), rgba(0, 0, 0, 0.04));
 }
 
 html[data-theme='light'] .search-mode-option[data-mode='LOCAL_AND_WEB'].active {
-  background: linear-gradient(135deg, rgba(72, 163, 255, 0.2), rgba(63, 200, 170, 0.16));
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.085), rgba(0, 0, 0, 0.04));
 }
 
 html[data-theme='light'] .source-group.is-blog {
   background:
-    linear-gradient(180deg, rgba(255, 190, 88, 0.12), rgba(255, 190, 88, 0.02) 42%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.015) 42%),
     transparent;
 }
 
 html[data-theme='light'] .source-group.is-web {
   background:
-    linear-gradient(180deg, rgba(95, 177, 255, 0.12), rgba(95, 177, 255, 0.02) 42%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.015) 42%),
     transparent;
 }
 
 html[data-theme='light'] .context-panel {
   background:
-    radial-gradient(circle at top left, rgba(196, 171, 130, 0.12), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(244, 241, 236, 0.56) 56%, rgba(244, 241, 236, 0));
+    radial-gradient(circle at top left, rgba(0, 0, 0, 0.04), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(242, 242, 242, 0.56) 56%, rgba(242, 242, 242, 0));
 }
 
 html[data-theme='light'] .context-panel::after {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0), #f7f5ef);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), #f4f4f4);
 }
 
 html[data-theme='light'] .composer-input-shell :deep(.el-textarea__inner) {
@@ -4510,16 +4884,20 @@ html[data-theme='light'] .composer-input-shell :deep(.el-textarea__inner:focus) 
 }
 
 html[data-theme='light'] .ghost-action.danger-strong {
-  color: #842828;
-  border-color: rgba(176, 52, 52, 0.24);
-  background: linear-gradient(180deg, rgba(255, 218, 218, 0.96), rgba(248, 231, 231, 0.96));
+  color: var(--text-main);
+  border-color: rgba(0, 0, 0, 0.12);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.02));
   box-shadow: none;
 }
 
 html[data-theme='light'] .ghost-action.danger-strong:hover {
-  color: #6f1c1c;
-  border-color: rgba(176, 52, 52, 0.34);
-  background: linear-gradient(180deg, rgba(255, 208, 208, 0.98), rgba(245, 222, 222, 0.98));
+  color: var(--text-main);
+  border-color: rgba(0, 0, 0, 0.18);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.03));
+}
+
+html[data-theme='light'] .user-bubble {
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 @keyframes status-pulse {
@@ -4543,6 +4921,18 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
 
   100% {
     background-position: -100% 0;
+  }
+}
+
+@keyframes knowledge-stage-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.992);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -4720,6 +5110,25 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
     font-size: 1.05rem;
   }
 
+  .empty-state {
+    margin-top: 8vh;
+    gap: 12px;
+  }
+
+  .empty-state h3 {
+    font-size: clamp(1.8rem, 10vw, 2.6rem);
+    line-height: 1.04;
+  }
+
+  .empty-state p {
+    line-height: 1.65;
+  }
+
+  .empty-prompt-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
   .conversation-viewport {
     padding: 14px 12px 10px;
   }
@@ -4759,6 +5168,25 @@ html[data-theme='light'] .ghost-action.danger-strong:hover {
 
   .chat-stage-head {
     padding: 14px 12px 12px;
+  }
+
+  .empty-state {
+    margin-top: 5vh;
+  }
+
+  .empty-state h3 {
+    font-size: clamp(1.55rem, 11vw, 2.2rem);
+  }
+
+  .composer-primary-mode,
+  .qwen-inline-controls,
+  .qwen-model-select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .composer-inline-btn {
+    width: 100%;
   }
 
   .conversation-viewport {

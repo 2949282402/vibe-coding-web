@@ -22,6 +22,15 @@ public interface AgentTaskMapper {
 
     AgentTask selectByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
+    long countDrafts(@Param("reviewStatus") String reviewStatus, @Param("keyword") String keyword);
+
+    List<AgentTask> selectDrafts(
+            @Param("reviewStatus") String reviewStatus,
+            @Param("keyword") String keyword,
+            @Param("offset") int offset,
+            @Param("limit") int limit
+    );
+
     int insert(AgentTask task);
 
     int update(@Param("task") AgentTask task);
@@ -35,5 +44,13 @@ public interface AgentTaskMapper {
             @Param("startedAt") LocalDateTime startedAt,
             @Param("completedAt") LocalDateTime completedAt
     );
-}
 
+    int updateReviewState(
+            @Param("id") Long id,
+            @Param("reviewStatus") String reviewStatus,
+            @Param("draftPostId") Long draftPostId,
+            @Param("reviewedBy") Long reviewedBy,
+            @Param("reviewedAt") LocalDateTime reviewedAt,
+            @Param("rejectReason") String rejectReason
+    );
+}

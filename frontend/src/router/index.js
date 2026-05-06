@@ -36,6 +36,7 @@ const routes = [
       { path: 'taxonomies', name: 'admin-taxonomies', component: () => import('../views/admin/TaxonomyManageView.vue') },
       { path: 'comments', name: 'admin-comments', component: () => import('../views/admin/CommentManageView.vue') },
       { path: 'rag-feedback', name: 'admin-rag-feedback', component: () => import('../views/admin/RagFeedbackManageView.vue') },
+      { path: 'agent-drafts', name: 'admin-agent-drafts', component: () => import('../views/admin/AgentDraftReviewView.vue') },
       { path: 'agents', name: 'admin-agents', component: () => import('../views/admin/AgentOpsView.vue') },
       { path: 'agent-tool-calls', name: 'admin-agent-tool-calls', component: () => import('../views/admin/AgentToolCallsView.vue') }
     ]

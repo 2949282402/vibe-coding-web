@@ -15,6 +15,7 @@ const menus = computed(() => [
   { label: preferences.t('admin.menuTaxonomy'), to: '/admin/taxonomies' },
   { label: preferences.t('admin.menuComments'), to: '/admin/comments' },
   { label: preferences.t('admin.menuRagFeedback'), to: '/admin/rag-feedback' },
+  { label: preferences.locale === 'zh-CN' ? 'Agent 草稿审核' : 'Agent Draft Review', to: '/admin/agent-drafts' },
   { label: preferences.locale === 'zh-CN' ? 'Agent 运维' : 'Agent Ops', to: '/admin/agents' },
   { label: preferences.locale === 'zh-CN' ? 'Agent 工具调用' : 'Agent Tool Calls', to: '/admin/agent-tool-calls' }
 ]);
@@ -33,6 +34,7 @@ const logout = () => {
           <div class="sidebar-heading">
             <span class="console-kicker">Console</span>
             <h1 class="console-title">{{ preferences.t('admin.consoleTitle') }}</h1>
+            <p class="console-copy muted">{{ preferences.t('admin.blogAdmin') }}</p>
           </div>
           <div class="sidebar-controls">
             <AppControls />
@@ -74,11 +76,16 @@ const logout = () => {
   gap: 18px;
   min-height: 0;
   height: 100vh;
-  padding: 24px 20px;
+  padding: 24px 20px 20px;
   color: var(--text-main);
   border-right: 1px solid var(--line);
-  background: var(--admin-sidebar-bg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+    var(--admin-sidebar-bg);
   overflow: auto;
+  backdrop-filter: blur(34px) saturate(140%);
+  -webkit-backdrop-filter: blur(34px) saturate(140%);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
 }
 
 .sidebar-top {
@@ -92,6 +99,12 @@ const logout = () => {
   min-width: 0;
 }
 
+.console-copy {
+  margin: 8px 0 0;
+  line-height: 1.6;
+  max-width: 240px;
+}
+
 .sidebar-controls {
   align-self: flex-start;
 }
@@ -103,11 +116,15 @@ const logout = () => {
 }
 
 .brand-card {
-  padding: 18px;
+  padding: 20px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
-  box-shadow: inset 0 1px 0 var(--glow-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 var(--glow-soft), 0 20px 38px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
 .brand-card h2 {
@@ -148,8 +165,14 @@ const logout = () => {
 
 .menu {
   flex: 1;
-  padding: 12px;
-  border-radius: 24px;
+  padding: 10px;
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
 .menu a,
@@ -159,13 +182,13 @@ const logout = () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 48px;
-  padding: 12px 14px;
-  border: 1px solid transparent;
-  border-radius: 14px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0);
+  border-radius: 16px;
   color: var(--text-secondary);
   background: transparent;
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  transition: background-color 0.28s var(--ease-soft), color 0.28s var(--ease-soft), border-color 0.28s var(--ease-soft), transform 0.28s var(--ease-liquid), box-shadow 0.28s var(--ease-liquid);
 }
 
 .menu a:hover,
@@ -173,16 +196,29 @@ const logout = () => {
 .sidebar-footer button:hover,
 .menu .router-link-active {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--line-strong);
-  box-shadow: none;
-  transform: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05)),
+    rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.14);
+  transform: translateY(-2px);
 }
 
 button {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.sidebar-footer {
+  padding: 10px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .admin-main {

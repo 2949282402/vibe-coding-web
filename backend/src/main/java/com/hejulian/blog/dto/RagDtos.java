@@ -34,7 +34,13 @@ public final class RagDtos {
             List<Source> sources,
             List<ChatMessage> history,
             boolean strictCitation,
-            String searchMode
+            String searchMode,
+            String sourceType,
+            int retrievalHitCount,
+            boolean usedWebSearch,
+            long latencyMs,
+            String confidenceLevel,
+            LocalDateTime knowledgeUpdatedAt
     ) {
     }
 

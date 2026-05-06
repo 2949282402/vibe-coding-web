@@ -39,6 +39,11 @@ public class AgentSchemaInitializer implements CommandLineRunner {
             ensureColumn(metadata, "agent_memory_hit", "used_in_step", "VARCHAR(64)");
             ensureColumn(metadata, "agent_tool_call", "success", "BOOLEAN");
             ensureColumn(metadata, "agent_task", "error_message", "VARCHAR(1000)");
+            ensureColumn(metadata, "agent_task", "review_status", "VARCHAR(32)");
+            ensureColumn(metadata, "agent_task", "draft_post_id", "BIGINT");
+            ensureColumn(metadata, "agent_task", "reviewed_by", "BIGINT");
+            ensureColumn(metadata, "agent_task", "reviewed_at", h2 ? "TIMESTAMP" : "DATETIME");
+            ensureColumn(metadata, "agent_task", "reject_reason", "VARCHAR(1000)");
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to initialize agent schema", ex);
         }

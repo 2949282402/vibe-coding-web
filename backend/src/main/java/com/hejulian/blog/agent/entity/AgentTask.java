@@ -35,10 +35,19 @@ public class AgentTask extends BaseEntity {
 
     private String finalOutputSummary;
 
+    private String reviewStatus;
+
+    private Long draftPostId;
+
+    private Long reviewedBy;
+
+    private LocalDateTime reviewedAt;
+
+    private String rejectReason;
+
     private String errorMessage;
 
     private LocalDateTime startedAt;
 
     private LocalDateTime completedAt;
 }
-

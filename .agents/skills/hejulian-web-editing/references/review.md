@@ -1,57 +1,61 @@
-# Review Reference
+# 评审参考
 
-Use for code review or final pass on changes in `hejulian-web`.
+用于对 `hejulian-web` 进行代码评审，或在改动完成后做最终复查。
 
-## Review strategy
+## 评审策略
 
-1. Identify changed files or affected feature area.
-2. Read only those files plus the matching reference.
-3. Trace contracts across frontend, backend, persistence, cache, and deployment when the change crosses layers.
-4. Report findings first, ordered by severity, with file/line references.
+1. 先识别改动文件或受影响的功能区域。
+2. 只读取这些文件和对应的引用文档。
+3. 如果改动跨层，沿着前端、后端、持久层、缓存、部署一路追契约。
+4. 输出时先给问题，按严重度排序，并附文件 / 行号定位。
 
-## Priority findings by area
+## 各区域优先关注的问题
 
-### Frontend
+### 前端
 
-- Route guard regressions.
-- Admin-only UI exposed to normal users.
-- Locale/copy regressions or corrupted UTF-8 strings.
-- API payload mismatch with backend DTOs.
-- `/knowledge` state regressions across RAG, Ask, and Agent modes.
-- Source/citation rendering or history restore breakage.
+- 路由守卫回归
+- 管理员 UI 暴露给普通用户
+- 中英文文案回归或 UTF-8 字符串损坏
+- API 载荷与后端 DTO 不匹配
+- `/knowledge` 在 RAG、Ask、Agent 三种模式下的状态回归
+- 来源 / 引用渲染或历史恢复失效
 
-### Backend
+### 后端
 
-- Controller/service/DTO/mapper mismatch.
-- MyBatis XML column/value count mismatch.
-- Schema changes missing from SQL bootstrap or initializer.
-- Auth/security regressions.
-- Cache invalidation omissions after writes.
-- Runtime config not applied through `RagRuntimeContextHolder`.
+- controller / service / DTO / mapper 契约不一致
+- MyBatis XML 列和值数量不匹配
+- 表结构改动没有同步到 SQL 初始化或 Initializer
+- 鉴权 / 安全回归
+- 写操作后遗漏缓存失效
+- 运行时配置没有正确走 `RagRuntimeContextHolder`
 
-### RAG/Ask
+### RAG / Ask
 
-- Ask accidentally using retrieval or requiring citations.
-- RAG losing source ownership or citation mappings.
-- SSE payload mismatch between backend `StreamEvent` and frontend parser.
-- Replay/feedback/history writes not preserving sources/variants.
+- Ask 意外走了检索或被强制要求引用
+- RAG 丢失来源归属或引用映射
+- 后端 `StreamEvent` 与前端流解析器不匹配
+- replay / feedback / history 写入时丢了来源或模式信息
 
 ### Agent
 
-- Task creation/retry running synchronously and hiding progress.
-- Cancellation not honored before publish/final status.
-- Tool calls not recorded or not visible in trace.
-- Final article containing plan/debug/tool text.
-- Admin-only backend route not enforced.
-- Published post caches not evicted.
+- 任务创建 / 重试同步执行，导致进度不可见
+- 取消任务后仍继续发布或写最终完成态
+- 工具调用没落轨迹，或前端不可见
+- 最终文章夹带 plan / debug / tool 文本
+- 管理员后端权限没有真正拦住
+- 发布文章后首页缓存未驱逐
 
-### Deployment
+### 部署
 
-- Nginx stream endpoints buffered.
-- Template/config mismatch for frontend nginx.
-- Docker compose env/mount mismatch.
-- `/resume` static route broken by Vue SPA routing.
+- nginx 对流式接口仍在缓冲
+- 前端 nginx 模板与实际生效配置不一致
+- docker compose 环境变量或挂载不一致
+- `/resume` 被 SPA 路由错误拦截
 
-## Residual risk notes
+## 无问题时也要说明的残余风险
 
-When no findings are found, mention any unvalidated risk such as no runtime smoke test, no Docker rebuild, or no live SSE check.
+如果没有发现明确问题，也要说明未验证项，例如：
+
+- 没做运行时冒烟验证
+- 没重建 Docker 镜像
+- 没实际验证 SSE 长连接

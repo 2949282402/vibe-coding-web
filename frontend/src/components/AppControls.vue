@@ -55,7 +55,7 @@ const localeOptions = computed(() => [
 .app-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .control-group {
@@ -78,8 +78,12 @@ const localeOptions = computed(() => [
   padding: 4px;
   border-radius: 999px;
   border: 1px solid var(--control-line);
-  background: var(--control-bg);
-  box-shadow: inset 0 1px 0 var(--glow-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
+  box-shadow: var(--glass-edge), 0 10px 20px rgba(2, 5, 12, 0.08);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .segment-button {
@@ -92,22 +96,25 @@ const localeOptions = computed(() => [
   font: inherit;
   font-size: 0.82rem;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.28s var(--ease-soft), color 0.28s var(--ease-soft), transform 0.28s var(--ease-liquid), box-shadow 0.28s var(--ease-liquid);
 }
 
 .segment-button:hover {
   color: var(--text-main);
   background: var(--control-bg-hover);
+  transform: translateY(-1px);
 }
 
 .segment-button.active {
-  background: var(--accent);
-  color: var(--bg-main);
-  box-shadow: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.7)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(194, 194, 194, 0.9));
+  color: #111214;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 10px 18px rgba(0, 0, 0, 0.18);
 }
 
 html[data-theme='light'] .segment-button.active {
-  color: #ffffff;
+  color: #15130f;
 }
 
 @media (max-width: 720px) {

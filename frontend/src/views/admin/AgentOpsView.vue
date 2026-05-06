@@ -73,6 +73,7 @@ const copy = computed(() => {
       next: '下一页',
       totalPageInfo: '{total} 条，当前 {page} / {pages}',
       openTrace: '查看 Trace',
+      reviewDraft: '去审核',
       open: '打开',
       taskSummary: '任务摘要',
       taskIdLabel: '任务 ID',
@@ -157,6 +158,7 @@ const copy = computed(() => {
     next: 'Next',
     totalPageInfo: '{total} total, page {page} / {pages}',
     openTrace: 'Open Trace',
+    reviewDraft: 'Review Draft',
     open: 'Open',
     taskSummary: 'Task summary',
     taskIdLabel: 'Task ID',
@@ -441,6 +443,13 @@ const openTaskSession = (sessionId) => {
   window.open(target.href, '_blank', 'noopener');
 };
 
+const openDraftReview = (taskId) => {
+  if (!taskId) {
+    return;
+  }
+  router.push({ path: '/admin/agent-drafts', query: { taskId: String(taskId) } });
+};
+
 const successTagType = (success) => (success ? 'success' : 'danger');
 const formatDatetime = (value) => preferences.formatDateTime(value);
 
@@ -503,9 +512,19 @@ onMounted(async () => {
             {{ formatDatetime(row.updatedAt) }}
           </template>
         </el-table-column>
-        <el-table-column :label="copy.actions" width="120" fixed="right">
+        <el-table-column :label="copy.actions" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openTraceDrawer(row)">{{ copy.openTrace }}</el-button>
+            <div class="row-actions">
+              <el-button link type="primary" @click="openTraceDrawer(row)">{{ copy.openTrace }}</el-button>
+              <el-button
+                v-if="row.status === 'COMPLETED' && row.allowDraftWrite"
+                link
+                type="warning"
+                @click="openDraftReview(row.id)"
+              >
+                {{ copy.reviewDraft }}
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -739,6 +758,12 @@ onMounted(async () => {
 
 .trace-actions {
   display: flex;
+  gap: 8px;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 

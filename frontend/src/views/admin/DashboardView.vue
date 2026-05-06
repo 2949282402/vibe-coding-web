@@ -219,6 +219,9 @@ onMounted(loadData);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    var(--admin-surface-bg);
 }
 
 .metric-card strong {
@@ -231,7 +234,7 @@ onMounted(loadData);
 .metric-card-accent {
   border-color: var(--line-strong);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 100%),
     var(--admin-surface-bg);
 }
 
@@ -274,7 +277,10 @@ html[data-theme='light'] .metric-card-accent {
   padding: 18px 18px 20px;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: var(--admin-soft-bg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    var(--admin-soft-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .rag-metric strong {
